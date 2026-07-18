@@ -6,6 +6,20 @@
 
 ## 安装
 
+一键安装（clone → `npm link` → Agent Skill）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sophiezel/mox/main/scripts/bootstrap.sh | bash
+```
+
+默认装到 `~/mox`。自定义目录：`INSTALL_DIR=/path/to/mox` 再跑上面的命令，或：
+
+```bash
+git clone --depth 1 https://github.com/sophiezel/mox.git ~/mox && cd ~/mox && bash scripts/install.sh
+```
+
+已在仓库内时：
+
 ```bash
 bash scripts/install.sh
 ```
