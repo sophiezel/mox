@@ -1,6 +1,6 @@
 # Repository map
 
-Inventory of the mock-skill tree (product + engineering). Status values:
+Inventory of the mox tree (product + engineering). Status values:
 
 | Status | Meaning |
 |--------|---------|
@@ -34,7 +34,7 @@ fixtures/     Synthetic frontend samples for tests/smoke
 
 | Path | Role | Status | Notes |
 |------|------|--------|-------|
-| `bin/mock-skill.js` | CLI entry / help / command dispatch | keep | |
+| `bin/mox.js` | CLI entry / help / command dispatch | keep | |
 | `package.json` | npm bin, scripts, publish `files` | keep | |
 | `README.md` | Install + quickstart | keep | Test matrix aligned with CI |
 | `SKILL.md` | Agent orchestration card | keep | Primary cmds: `start` / `stop` |
@@ -147,7 +147,7 @@ fixtures/     Synthetic frontend samples for tests/smoke
 
 | Path | Role | Status | Notes |
 |------|------|--------|-------|
-| `test/_isolate-data-root.cjs` | Temp `MOCK_SKILL_DATA_ROOT` preload | keep | Wired in npm test scripts |
+| `test/_isolate-data-root.cjs` | Temp `MOX_DATA_ROOT` preload | keep | Wired in npm test scripts |
 | `test/phase0-*.test.js` … `phase4-*.test.js` | Feature gates from closed roadmap | review | Content valuable; rename-to-topic later |
 | `test/catalog-resolve.test.js` | catalog-merge resolve | keep | |
 | `test/ux-simplify.test.js` | Help / start reset / stop journal | keep | |

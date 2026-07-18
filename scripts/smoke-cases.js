@@ -63,7 +63,7 @@ async function smokeCases(opts = {}) {
   const cfg = loadSession(projectSlug);
   const contracts = loadContractsForCatalog(projectSlug);
   if (!contracts.length) {
-    throw new Error('no contracts — run mock-skill init first');
+    throw new Error('no contracts — run mox init first');
   }
 
   const ci = Boolean(opts.ci);
@@ -151,9 +151,9 @@ async function smokeCases(opts = {}) {
     summary: `ci=${ci} total=${results.length} failed=${failed}`,
   });
   console.log(md);
-  console.log(`[mock-skill] smoke report: ${report}`);
+  console.log(`[mox] smoke report: ${report}`);
   if (ci && results.length === 0) {
-    console.error('[mock-skill] smoke --ci: no handlers to smoke (all contracts skipped)');
+    console.error('[mox] smoke --ci: no handlers to smoke (all contracts skipped)');
     failed = failed || 1;
   }
   if (failed) process.exitCode = 1;

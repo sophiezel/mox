@@ -23,18 +23,18 @@ function runRules(opts = {}) {
 
   if (action === 'list') {
     const names = listRuleNames(dir);
-    console.log(`[mock-skill] rules dir: ${rulesDir(dir)}`);
+    console.log(`[mox] rules dir: ${rulesDir(dir)}`);
     if (!names.length) {
-      console.log('[mock-skill] (no rule files)');
+      console.log('[mox] (no rule files)');
     } else {
       for (const n of names) console.log(`  - ${n}`);
     }
     const cfg = loadSession();
     if (cfg.activeRules?.length) {
-      console.log(`[mock-skill] activeRules: ${cfg.activeRules.join(', ')}`);
+      console.log(`[mox] activeRules: ${cfg.activeRules.join(', ')}`);
     }
     console.log(
-      `[mock-skill] trafficMode=${cfg.proxy?.trafficMode || 'all-mock'} allowlist=${(cfg.proxy?.mockAllowlist || []).length}`,
+      `[mox] trafficMode=${cfg.proxy?.trafficMode || 'all-mock'} allowlist=${(cfg.proxy?.mockAllowlist || []).length}`,
     );
     return { names, dir: rulesDir(dir) };
   }
@@ -42,7 +42,7 @@ function runRules(opts = {}) {
   if (action === 'use') {
     const keywords = parseRulesKeywords(opts.keywords || opts._);
     if (!keywords.length) {
-      throw new Error('Usage: mock-skill rules use <keyword> [keyword…]');
+      throw new Error('Usage: mox rules use <keyword> [keyword…]');
     }
     const { merged } = applyRulesToSession(keywords, { rulesDir: dir });
     const primary = loadSession().activeCatalogs?.[0] || 'default';
@@ -51,16 +51,16 @@ function runRules(opts = {}) {
       summary: `rules=${merged.resolved.join(',')} stubs=${merged.stubs.length}`,
     });
     console.log(
-      `[mock-skill] rules applied: ${merged.resolved.join(', ')} (${merged.stubs.length} stubs, selective)`,
+      `[mox] rules applied: ${merged.resolved.join(', ')} (${merged.stubs.length} stubs, selective)`,
     );
-    console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+    console.log('[mox] session picks up via ≤1s cache; no restart needed');
     return merged;
   }
 
   if (action === 'save') {
     const name = opts.name || (opts.keywords && opts.keywords[0]);
     if (!name) {
-      throw new Error('Usage: mock-skill rules save <name>');
+      throw new Error('Usage: mox rules save <name>');
     }
     const result = saveRulesFromSession(name, { rulesDir: dir });
     const primary = loadSession().activeCatalogs?.[0] || 'default';
@@ -69,7 +69,7 @@ function runRules(opts = {}) {
       summary: `name=${result.name} stubs=${result.stubs}`,
     });
     console.log(
-      `[mock-skill] saved rule ${result.name} (${result.stubs} stubs) → ${result.file}`,
+      `[mox] saved rule ${result.name} (${result.stubs} stubs) → ${result.file}`,
     );
     return result;
   }

@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-catalog-api-'));
-process.env.MOCK_SKILL_DATA_ROOT = tmpRoot;
+process.env.MOX_DATA_ROOT = tmpRoot;
 
 const {
   writeProjectIndex,
@@ -27,7 +27,7 @@ const {
 } = require('../lib/paths');
 
 before(() => {
-  process.env.MOCK_SKILL_DATA_ROOT = tmpRoot;
+  process.env.MOX_DATA_ROOT = tmpRoot;
 });
 
 after(() => {

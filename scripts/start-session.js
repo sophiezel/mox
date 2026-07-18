@@ -140,16 +140,16 @@ async function startSession(opts = {}) {
   const { resetStore, journalSummary } = require('../lib/service-store');
   if (!keepState) {
     resetStore('*');
-    console.log('[mock-skill] store reset (use --keep-state to retain)');
+    console.log('[mox] store reset (use --keep-state to retain)');
   } else {
-    console.log('[mock-skill] store kept (--keep-state)');
+    console.log('[mox] store kept (--keep-state)');
   }
 
   // --rules wins: selective allowlist. Ignore all-passthrough / conflicting --traffic=.
   if (ruleKeywords.length && opts.traffic && opts.traffic !== 'selective') {
     if (opts.traffic === 'all-passthrough') {
       console.log(
-        '[mock-skill] ignoring all-passthrough/--record traffic mode; --rules keeps selective',
+        '[mox] ignoring all-passthrough/--record traffic mode; --rules keeps selective',
       );
     } else {
       throw new Error(
@@ -251,7 +251,7 @@ async function startSession(opts = {}) {
     caseHeader: cfg.proxy.injectCaseHeader || 'x-mock-case',
   });
   console.log(
-    `[mock-skill] mock ${mock.url} catalogs=${catalogs.join(',')}`,
+    `[mox] mock ${mock.url} catalogs=${catalogs.join(',')}`,
   );
 
   let proxy = null;
@@ -273,9 +273,9 @@ async function startSession(opts = {}) {
           getSecureContext: (hostname) => ca.getSecureContext(hostname),
           caCertPath: ca.caCertPath,
         };
-        console.log(`[mock-skill] HTTPS MITM enabled; trust CA: ${ca.caCertPath}`);
+        console.log(`[mox] HTTPS MITM enabled; trust CA: ${ca.caCertPath}`);
       } catch (e) {
-        console.warn(`[mock-skill] MITM unavailable: ${e.message}`);
+        console.warn(`[mox] MITM unavailable: ${e.message}`);
       }
     }
     const statefulLoader = () => {
@@ -316,7 +316,7 @@ async function startSession(opts = {}) {
       accessLogPath: path.join(projectDataDir(primary), 'audit', 'proxy-access.jsonl'),
     });
     console.log(
-      `[mock-skill] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,
+      `[mox] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,
     );
     if (proxyHost === '0.0.0.0') {
       const ip = lanIp();
@@ -340,7 +340,7 @@ async function startSession(opts = {}) {
       console.log('');
     }
   } else {
-    console.log('[mock-skill] proxy disabled');
+    console.log('[mox] proxy disabled');
   }
 
   const userDataDir = chromeProfileDir(primary);
@@ -373,7 +373,7 @@ async function startSession(opts = {}) {
     const child = spawn(chrome, args, { detached: true, stdio: 'ignore' });
     child.unref();
     chromePid = child.pid;
-    console.log(`[mock-skill] launched Chrome pid=${chromePid}`);
+    console.log(`[mox] launched Chrome pid=${chromePid}`);
   }
 
   const state = {
@@ -398,18 +398,18 @@ async function startSession(opts = {}) {
     return { mock, proxy, state, chromeCmd, catalogs, rules: merged.rules };
   }
 
-  console.log('[mock-skill] session running — Ctrl+C to stop');
+  console.log('[mox] session running — Ctrl+C to stop');
   // SIGHUP (terminal close / background without --detach) must not kill the session.
-  // Use `mock-skill stop` or SIGTERM/SIGINT to shut down.
+  // Use `mox stop` or SIGTERM/SIGINT to shut down.
   try {
     process.on('SIGHUP', () => {
-      console.log('[mock-skill] ignoring SIGHUP (use mock-skill stop to end session)');
+      console.log('[mox] ignoring SIGHUP (use mox stop to end session)');
     });
   } catch {
     /* platform may not support SIGHUP */
   }
   const shutdown = async () => {
-    console.log('\n[mock-skill] stopping...');
+    console.log('\n[mox] stopping...');
     if (chromePid) {
       try {
         process.kill(chromePid, 'SIGTERM');

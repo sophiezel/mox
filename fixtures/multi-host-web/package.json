@@ -1,6 +1,6 @@
 {
   "name": "multi-host-web-fixture",
   "version": "1.0.0",
-  "description": "Multi-host web fixture for mock-skill upstream E2E: hostVar expansion + multi-upstream collapse. No company domain, no custom business names.",
+  "description": "Multi-host web fixture for mox upstream E2E: hostVar expansion + multi-upstream collapse. No company domain, no custom business names.",
   "private": true
 }

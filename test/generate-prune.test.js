@@ -146,13 +146,13 @@ test('generate: empty + no_export_symbol is contract-only (no proxy rule)', () =
   });
 });
 
-test('pruneOrphanArtifacts: keeps mock-skill:manual handlers', () => {
+test('pruneOrphanArtifacts: keeps mox:manual handlers', () => {
   withTempProject((slug) => {
     const handler = stubHandlerPath(slug, 'prune-svc', 'GET', '/v1/manual');
     fs.mkdirSync(path.dirname(handler), { recursive: true });
     fs.writeFileSync(
       handler,
-      '/** mock-skill:manual */\nmodule.exports = () => ({});\n',
+      '/** mox:manual */\nmodule.exports = () => ({});\n',
     );
     const { prunedHandlers } = pruneOrphanArtifacts(slug, {
       keepHandlerKeys: new Set(),

@@ -34,8 +34,8 @@ function setTraffic(opts = {}) {
   let list = Array.isArray(proxy.mockAllowlist) ? [...proxy.mockAllowlist] : [];
 
   if (action === 'list' || action === '') {
-    console.log(`[mock-skill] trafficMode=${mode}`);
-    console.log(`[mock-skill] mockAllowlist (${list.length}):`);
+    console.log(`[mox] trafficMode=${mode}`);
+    console.log(`[mox] mockAllowlist (${list.length}):`);
     for (const id of list) console.log(`  - ${id}`);
     return { trafficMode: mode, mockAllowlist: list };
   }
@@ -49,20 +49,20 @@ function setTraffic(opts = {}) {
       command: 'traffic',
       summary: 'clear allowlist',
     });
-    console.log('[mock-skill] mockAllowlist cleared');
-    console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+    console.log('[mox] mockAllowlist cleared');
+    console.log('[mox] session picks up via ≤1s cache; no restart needed');
     return { trafficMode: mode, mockAllowlist: list };
   }
 
   if (action === 'allow') {
     const stubId = opts.stubId;
-    if (!stubId) throw new Error('Usage: mock-skill traffic allow <stubId>');
+    if (!stubId) throw new Error('Usage: mox traffic allow <stubId>');
     assertStubId(stubId);
     if (!list.includes(stubId)) list.push(stubId);
     const patch = { mockAllowlist: list };
     if (mode !== 'selective') {
       console.log(
-        `[mock-skill] hint: trafficMode is "${mode}"; allowlist only applies in selective. Run: mock-skill traffic selective`,
+        `[mox] hint: trafficMode is "${mode}"; allowlist only applies in selective. Run: mox traffic selective`,
       );
     }
     saveSession(projectSlug, { proxy: { ...proxy, ...patch } });
@@ -71,14 +71,14 @@ function setTraffic(opts = {}) {
       apiKey: stubId,
       summary: 'allow',
     });
-    console.log(`[mock-skill] allow ${stubId}`);
-    console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+    console.log(`[mox] allow ${stubId}`);
+    console.log('[mox] session picks up via ≤1s cache; no restart needed');
     return { trafficMode: mode, mockAllowlist: list };
   }
 
   if (action === 'deny') {
     const stubId = opts.stubId;
-    if (!stubId) throw new Error('Usage: mock-skill traffic deny <stubId>');
+    if (!stubId) throw new Error('Usage: mox traffic deny <stubId>');
     assertStubId(stubId);
     list = list.filter((x) => x !== stubId);
     saveSession(projectSlug, {
@@ -89,8 +89,8 @@ function setTraffic(opts = {}) {
       apiKey: stubId,
       summary: 'deny',
     });
-    console.log(`[mock-skill] deny ${stubId}`);
-    console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+    console.log(`[mox] deny ${stubId}`);
+    console.log('[mox] session picks up via ≤1s cache; no restart needed');
     return { trafficMode: mode, mockAllowlist: list };
   }
 
@@ -105,13 +105,13 @@ function setTraffic(opts = {}) {
       command: 'traffic',
       summary: `mode=${mode}`,
     });
-    console.log(`[mock-skill] trafficMode=${mode}`);
-    console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+    console.log(`[mox] trafficMode=${mode}`);
+    console.log('[mox] session picks up via ≤1s cache; no restart needed');
     return { trafficMode: mode, mockAllowlist: list };
   }
 
   throw new Error(
-    `Usage: mock-skill traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]`,
+    `Usage: mox traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]`,
   );
 }
 

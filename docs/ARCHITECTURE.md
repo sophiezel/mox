@@ -59,7 +59,7 @@ LLM 介入边界（摘要；**真源**见 [`DECISIONS.md`](./DECISIONS.md) § LL
 
 优先级：`passthroughHosts` → `trafficMode` → 无 rule 时 `missPolicy`。
 
-日常入口：`mock-skill start`（默认 `all-mock`，主轨 0 依赖）；可选辅轨 `start --record`（=`all-passthrough`，升 L2，非 E2E）。
+日常入口：`mox start`（默认 `all-mock`，主轨 0 依赖）；可选辅轨 `start --record`（=`all-passthrough`，升 L2，非 E2E）。
 
 细节与 port 匹配见 [`references/session-and-proxy.md`](../references/session-and-proxy.md)。
 
@@ -87,7 +87,7 @@ Proxy → TrafficPolicy → VirtualService → Handler
 
 Shape 通道（有界静态推断，见 [`references/infer-from-usage.md`](../references/infer-from-usage.md)）：
 
-- **DeclarativeFieldSource**：按 JSX 属性名提取 `columns[].dataIndex` / `fieldNames` 等；项目可在 `.mock-skill/infer.json` 注册自定义 prop 名。
+- **DeclarativeFieldSource**：按 JSX 属性名提取 `columns[].dataIndex` / `fieldNames` 等；项目可在 `.mox/infer.json` 注册自定义 prop 名。
 - **一层跨文件 props-drill**：父传 `detail={payload}`，子读 `detail.name` → 回连到响应 shape。
 - 超出边界 → `TRACE_EMPTY` / `props_shallow_only`，导向 capture / OpenAPI。
 
@@ -117,6 +117,6 @@ rules/                         共享 rule 包（可 git；不绑 project）
 - 同一 `upstreamId` 被多前端发现时 **共享** `.data/services/<upstreamId>/`。
 - stubId 跨不同服务冲突 → 启动失败（不静默覆盖）。
 - `--task` 只做需求溯源，**不**拆分 mock 目录。
-- 单测默认写入临时 `MOCK_SKILL_DATA_ROOT`，不污染本仓 `.data`。
+- 单测默认写入临时 `MOX_DATA_ROOT`，不污染本仓 `.data`。
 - 读 contracts/handlers：**统一** `lib/catalog-merge`（`loadContractsForCatalog` / `handlerExistsForContract`）；禁止各脚本私自只扫 `projects/*/mocks`。
-- 后台 session：`mock-skill start --detach`（子进程保活）；前台默认忽略 SIGHUP，用 `stop` / SIGTERM 结束。
+- 后台 session：`mox start --detach`（子进程保活）；前台默认忽略 SIGHUP，用 `stop` / SIGTERM 结束。

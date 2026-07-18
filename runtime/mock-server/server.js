@@ -43,7 +43,7 @@ if (require.main === module) {
     host: args.host || '127.0.0.1',
     port: Number(args.port || 3900),
   }).then((s) => {
-    console.log(`[mock-skill] mock listening ${s.url} mocksRoot=${args.mocksRoot}`);
+    console.log(`[mox] mock listening ${s.url} mocksRoot=${args.mocksRoot}`);
   });
 }
 

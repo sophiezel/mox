@@ -19,14 +19,14 @@
 ## 共享 rules
 
 ```bash
-mock-skill start --name=tower --name=other --rules jian-h5 xrk
-mock-skill start --rules jian-h5 --record   # rules 优先：命中 mock，其余透传并录制
-mock-skill rules use jian-h5 xrk
-mock-skill rules list
-mock-skill rules save my-pack
+mox start --name=tower --name=other --rules jian-h5 xrk
+mox start --rules jian-h5 --record   # rules 优先：命中 mock，其余透传并录制
+mox rules use jian-h5 xrk
+mox rules list
+mox rules save my-pack
 ```
 
-文件：`<pkg>/rules/<name>.json`（`--rules-dir=` / `MOCK_SKILL_RULES_DIR` 可改）：
+文件：`<pkg>/rules/<name>.json`（`--rules-dir=` / `MOX_RULES_DIR` 可改）：
 
 ```json
 {
@@ -54,11 +54,11 @@ Catalog / `proxy-rules.json` 可全量存在；**运行时是否 mock 由 `traff
 3. 无 rule → `missPolicy`（passthrough | reject）
 
 ```bash
-mock-skill traffic all-passthrough          # 录制
-mock-skill traffic selective
-mock-skill traffic allow "GET svc-a/v1/items"
-mock-skill traffic list
-mock-skill traffic all-mock                 # 自测
+mox traffic all-passthrough          # 录制
+mox traffic selective
+mox traffic allow "GET svc-a/v1/items"
+mox traffic list
+mox traffic all-mock                 # 自测
 ```
 
 热更新：写 `.data/session.json`；proxy ≤1s 经 `trafficLoader` 生效，无需重启。
@@ -83,7 +83,7 @@ Chrome --user-data-dir=.data/chrome-profiles/<slug> --proxy-server=127.0.0.1:<pr
 ## 真机 WebView
 
 ```bash
-mock-skill session start --proxy-host=0.0.0.0
+mox session start --proxy-host=0.0.0.0
 ```
 
 启动日志打印 `Wi-Fi 代理: <LAN_IP>:<proxyPort>`，在手机 Wi‑Fi 手动代理填写。详见 `e2e-and-device-proxy.md`。

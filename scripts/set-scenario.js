@@ -13,7 +13,7 @@ function setScenario(opts = {}) {
   const name = opts.scenario;
   if (!name) {
     const avail = listScenarios(projectSlug);
-    throw new Error(`Usage: mock-skill set-scenario <name>. Available: ${avail.join(', ') || '(none)'}`);
+    throw new Error(`Usage: mox set-scenario <name>. Available: ${avail.join(', ') || '(none)'}`);
   }
   const scenario = loadScenario(projectSlug, name);
   const cfg = loadSession(projectSlug);
@@ -42,8 +42,8 @@ function setScenario(opts = {}) {
     taskId: opts.taskId || null,
     summary: `scenario=${name} default=${defaultCase} apis=${Object.keys(scenario.apis || {}).length}`,
   });
-  console.log(`[mock-skill] scenario ${name} applied (default=${defaultCase}, apis=${Object.keys(scenario.apis || {}).length})`);
-  console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+  console.log(`[mox] scenario ${name} applied (default=${defaultCase}, apis=${Object.keys(scenario.apis || {}).length})`);
+  console.log('[mox] session picks up via ≤1s cache; no restart needed');
 }
 
 module.exports = { setScenario };

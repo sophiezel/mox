@@ -12,7 +12,7 @@ function runDomainDraft(args) {
   const flags = args.flags || {};
   const upstreamId = flags.upstream || flags.name;
   if (!upstreamId || upstreamId === true) {
-    console.error('Usage: mock-skill domain-draft --upstream=<id> [--project=slug] [--confirm]');
+    console.error('Usage: mox domain-draft --upstream=<id> [--project=slug] [--confirm]');
     process.exitCode = 1;
     return;
   }
@@ -45,7 +45,7 @@ function runMaterializeService(args) {
   const flags = args.flags || {};
   const upstreamId = flags.upstream || flags.name;
   if (!upstreamId || upstreamId === true) {
-    console.error('Usage: mock-skill materialize-service --upstream=<id> [--force]');
+    console.error('Usage: mox materialize-service --upstream=<id> [--force]');
     process.exitCode = 1;
     return;
   }

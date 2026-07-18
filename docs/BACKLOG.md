@@ -23,4 +23,4 @@
 - Service Catalog + Virtual Store + 静默 domain-draft / CRUD materialize
 - 主路径 UX：`start` reset、`stop` journal、`help` 分层、L0–L6 guides
 - OpenAPI import（含 YAML）、when 匹配、export-msw、最小 HTTPS MITM
-- 单测 `MOCK_SKILL_DATA_ROOT` 隔离（不污染仓库 `.data`）
+- 单测 `MOX_DATA_ROOT` 隔离（不污染仓库 `.data`）

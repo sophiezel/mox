@@ -3,7 +3,7 @@
 const { resetStore, readJournal, clearJournal, getStore } = require('../lib/service-store');
 
 /**
- * CLI: mock-skill service reset|journal|status
+ * CLI: mox service reset|journal|status
  * @param {{ _: string[], flags: Record<string, any> }} args
  */
 function runService(args) {
@@ -39,9 +39,9 @@ function runService(args) {
   }
 
   console.log(`Usage (advanced — see references/guide-l6-advanced.md#repair):
-  mock-skill service reset [--upstream=ID]
-  mock-skill service journal [--limit=N] [--clear]
-  mock-skill service status --upstream=ID
+  mox service reset [--upstream=ID]
+  mox service journal [--limit=N] [--clear]
+  mox service status --upstream=ID
 
 Main path auto-resets store on start; stop prints a journal one-liner.
 `);

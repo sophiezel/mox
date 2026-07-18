@@ -1,12 +1,12 @@
 {
-  "name": "mock-skill",
+  "name": "mox",
   "version": "1.1.0",
   "description": "Generic frontend API mock CLI — single proxy, multi catalog, shared rules",
   "bin": {
-    "mock-skill": "./bin/mock-skill.js"
+    "mox": "./bin/mox.js"
   },
   "scripts": {
-    "mock-skill": "node ./bin/mock-skill.js",
+    "mox": "node ./bin/mox.js",
     "install:local": "bash ./scripts/install.sh",
     "test": "node --require ./test/_isolate-data-root.cjs --test test/*.test.js",
     "test:smoke": "node --require ./test/_isolate-data-root.cjs scripts/run-fixture-smoke.js",

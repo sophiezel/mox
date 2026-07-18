@@ -30,4 +30,4 @@
 | `start` | `resetStore('*')` | `service reset`（除非 `--keep-state`） |
 | `stop` | journal 一行摘要 | `service journal`（除非要看 JSON 明细） |
 
-高级命令全集：`mock-skill help --all`。
+高级命令全集：`mox help --all`。

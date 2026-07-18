@@ -5,7 +5,7 @@
 ## 桌面 Playwright
 
 ```bash
-mock-skill session start --start-url=http://localhost:8080
+mox session start --start-url=http://localhost:8080
 ```
 
 Playwright 配置指向本 CLI proxy：
@@ -25,10 +25,10 @@ export default {
 import { execSync } from 'node:child_process';
 
 test.beforeAll(() => {
-  execSync('mock-skill set-scenario e2e-fault');
+  execSync('mox set-scenario e2e-fault');
 });
 test.afterAll(() => {
-  execSync('mock-skill set-scenario e2e-happy');
+  execSync('mox set-scenario e2e-happy');
 });
 ```
 
@@ -38,11 +38,11 @@ test.afterAll(() => {
 2. 启动时 bind 到 LAN：
 
 ```bash
-mock-skill session start --proxy-host=0.0.0.0 --start-url=http://localhost:8080
+mox session start --proxy-host=0.0.0.0 --start-url=http://localhost:8080
 # 需要透传未 mock 的上游时：
-mock-skill session start --proxy-host=0.0.0.0 --allow-open-proxy
+mox session start --proxy-host=0.0.0.0 --allow-open-proxy
 # HTTPS 改写（命中 proxy-rules 的 host）：
-mock-skill session start --proxy-host=0.0.0.0 --mitm=1
+mox session start --proxy-host=0.0.0.0 --mitm=1
 ```
 
 3. 启动日志会打印 `Wi-Fi 代理: <LAN_IP>:<proxyPort>`，在手机 Wi‑Fi → 手动代理 填写该 host/port

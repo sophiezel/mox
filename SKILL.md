@@ -1,22 +1,22 @@
 ---
-name: api-mock-orchestrator
+name: mox
 description: >-
-  Orchestrate the mock-skill CLI for zero-coupling frontend API mock (self-test
-  + E2E, desktop and on-device WebView). Prefer invoking mock-skill over writing
+  Orchestrate the mox CLI for zero-coupling frontend API mock (self-test
+  + E2E, desktop and on-device WebView). Prefer invoking mox over writing
   scripts. Discovers APIs, classifies new/modify/dependency/unrelated, generates
   contracts/handlers with WireMock-aligned scenarios, runs mock+proxy sessions.
-  Use when the user mentions mock-skill, init mock, API mock, 自测 mock,
+  Use when the user mentions mox, init mock, API mock, 自测 mock,
   倒推接口, backend not ready, E2E mock, 弱网, 超时, 依赖故障, or boundary case.
 disable-model-invocation: true
 ---
 
-# api-mock-orchestrator（mock-skill 编排）
+# mox
 
 > **CLI 负责确定性能力；LLM 负责有歧义的语义决策与流程编排；Skill 把边界钉死。**
 
 本文件是裁决卡，不是 CLI 手册。安装、端口、真机代理、命令全表 → 仓库根 [`README.md`](./README.md)。LLM 边界真源 → [`docs/DECISIONS.md`](./docs/DECISIONS.md)。
 
-**硬规则**：优先调用 `mock-skill`，勿自写 mock/proxy 脚本。
+**硬规则**：优先调用 `mox`，勿自写 mock/proxy 脚本。
 
 ## 五步（编排）
 
@@ -44,7 +44,7 @@ disable-model-invocation: true
 
 ## Agent checklist
 
-- [ ] 优先 CLI：`mock-skill init` / `start` / `stop` / `scenario`（旧名 `session start` / `set-scenario` 仍可用）
+- [ ] 优先 CLI：`mox init` / `start` / `stop` / `scenario`（旧名 `session start` / `set-scenario` 仍可用）
 - [ ] 需求自测提醒 `--task=<需求ID>`（changelog 溯源）
 - [ ] **禁止臆造** `new` 的 IO：无 docs/OpenAPI/用户定义时 BLOCK generate
 - [ ] modify 冲突：展示 `reports/contract-conflicts.md`，未决议不覆盖
@@ -77,14 +77,14 @@ disable-model-invocation: true
 
 ```bash
 bash scripts/install.sh
-cd <frontend> && mock-skill init [--task=ID] [--related-from=doc]
-mock-skill start --name=<slug> [--task=ID] [--start-url=http://localhost:8080]
-# 后台: mock-skill start --name=<slug> --detach
-mock-skill scenario e2e-fault && mock-skill merge
-mock-skill stop
+cd <frontend> && mox init [--task=ID] [--related-from=doc]
+mox start --name=<slug> [--task=ID] [--start-url=http://localhost:8080]
+# 后台: mox start --name=<slug> --detach
+mox scenario e2e-fault && mox merge
+mox stop
 # HTTPS 改写（可选）: start --mitm=1 （须信任打印的 CA）
 # LAN 开放代理须显式: --allow-open-proxy
-# OpenAPI: mock-skill import-openapi --from=./openapi.json
+# OpenAPI: mox import-openapi --from=./openapi.json
 ```
 
 详情与真机/`--proxy-host` → [`README.md`](./README.md)。**HTTPS 默认不改写**（CONNECT 隧道）；真机 HTTPS mock 用 `--mitm=1`。

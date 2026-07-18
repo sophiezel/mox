@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { resolveStartTraffic } = require('../bin/mock-skill');
+const { resolveStartTraffic } = require('../bin/mox');
 const { setTraffic } = require('../scripts/set-traffic');
 const { loadSession, saveSession } = require('../lib/session-config');
 const { applySessionOpts } = require('../scripts/start-session');
@@ -23,16 +23,16 @@ function withSlug(fn) {
   const slug = `intent-cli-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const sessionFile = path.join(os.tmpdir(), `${slug}-session.json`);
   const runtimeFile = path.join(os.tmpdir(), `${slug}-runtime.json`);
-  const prevS = process.env.MOCK_SKILL_SESSION_FILE;
-  const prevR = process.env.MOCK_SKILL_RUNTIME_FILE;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
-  process.env.MOCK_SKILL_RUNTIME_FILE = runtimeFile;
+  const prevS = process.env.MOX_SESSION_FILE;
+  const prevR = process.env.MOX_RUNTIME_FILE;
+  process.env.MOX_SESSION_FILE = sessionFile;
+  process.env.MOX_RUNTIME_FILE = runtimeFile;
   ensureProjectDirs(slug);
   try {
     return fn(slug);
   } finally {
-    process.env.MOCK_SKILL_SESSION_FILE = prevS;
-    process.env.MOCK_SKILL_RUNTIME_FILE = prevR;
+    process.env.MOX_SESSION_FILE = prevS;
+    process.env.MOX_RUNTIME_FILE = prevR;
     for (const f of [sessionFile, runtimeFile]) {
       try {
         fs.unlinkSync(f);

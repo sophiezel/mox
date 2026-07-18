@@ -11,12 +11,12 @@ const { loadSession } = require('../lib/session-config');
 function withSlug(fn) {
   const slug = `traffic-cli-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const sessionFile = path.join(os.tmpdir(), `${slug}-session.json`);
-  const prev = process.env.MOCK_SKILL_SESSION_FILE;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
+  const prev = process.env.MOX_SESSION_FILE;
+  process.env.MOX_SESSION_FILE = sessionFile;
   try {
     return fn(slug);
   } finally {
-    process.env.MOCK_SKILL_SESSION_FILE = prev;
+    process.env.MOX_SESSION_FILE = prev;
     try {
       fs.unlinkSync(sessionFile);
     } catch (_) {

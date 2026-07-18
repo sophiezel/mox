@@ -26,21 +26,21 @@ const {
   saveRulesFromSession,
   parseRulesKeywords,
 } = require('../lib/rules');
-const { parseArgs } = require('../bin/mock-skill');
+const { parseArgs } = require('../bin/mox');
 
-const TMP = path.join(os.tmpdir(), `mock-skill-rules-test-${Date.now()}`);
+const TMP = path.join(os.tmpdir(), `mox-rules-test-${Date.now()}`);
 
 function withIsolatedSession(fn) {
   const sessionFile = path.join(
     os.tmpdir(),
     `rules-sess-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`,
   );
-  const prev = process.env.MOCK_SKILL_SESSION_FILE;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
+  const prev = process.env.MOX_SESSION_FILE;
+  process.env.MOX_SESSION_FILE = sessionFile;
   try {
     return fn(sessionFile);
   } finally {
-    process.env.MOCK_SKILL_SESSION_FILE = prev;
+    process.env.MOX_SESSION_FILE = prev;
     try {
       fs.unlinkSync(sessionFile);
     } catch (_) {
@@ -67,7 +67,7 @@ test('parseNameList and parseRulesKeywords', () => {
 test('parseArgs accumulates --name and --rules', () => {
   const p = parseArgs([
     'node',
-    'mock-skill',
+    'mox',
     'start',
     '--name=tower',
     '--name=other',

@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-svc-cat-'));
-process.env.MOCK_SKILL_DATA_ROOT = tmpRoot;
+process.env.MOX_DATA_ROOT = tmpRoot;
 
 const {
   serviceDataDir,
@@ -34,7 +34,7 @@ before(() => {
 
 after(() => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
-  delete process.env.MOCK_SKILL_DATA_ROOT;
+  delete process.env.MOX_DATA_ROOT;
 });
 
 test('service dirs and stub handler path under services/<upstreamId>', () => {

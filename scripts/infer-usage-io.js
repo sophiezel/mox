@@ -1320,7 +1320,7 @@ function enrichApisWithUsageIo(projectDir, apis, opts = {}) {
   }
 
   console.log(
-    `[mock-skill] usage-io enriched ${processed}/${exportDeclPairs.length} exports (${apis.length} apis)`,
+    `[mox] usage-io enriched ${processed}/${exportDeclPairs.length} exports (${apis.length} apis)`,
   );
   return apis;
 }

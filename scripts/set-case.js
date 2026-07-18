@@ -32,7 +32,7 @@ function setCase(opts = {}) {
   const apiId = opts.apiId;
   const caseId = opts.caseId;
   if (!apiId || !caseId) {
-    throw new Error('Usage: mock-skill set-case <apiId> <caseId>');
+    throw new Error('Usage: mox set-case <apiId> <caseId>');
   }
   assertStubId(apiId);
   const cfg = loadSession(projectSlug);
@@ -45,8 +45,8 @@ function setCase(opts = {}) {
     apiKey: apiId,
     summary: `case=${caseId}`,
   });
-  console.log(`[mock-skill] set case ${apiId} -> ${caseId}`);
-  console.log('[mock-skill] session picks up via ≤1s cache; no restart needed');
+  console.log(`[mox] set case ${apiId} -> ${caseId}`);
+  console.log('[mox] session picks up via ≤1s cache; no restart needed');
 }
 
 module.exports = { setCase, assertStubId };

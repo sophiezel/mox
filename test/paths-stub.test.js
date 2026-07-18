@@ -75,8 +75,8 @@ test('ensureProjectDirs does not create chrome-profiles (no garbage)', () => {
     getDataRoot,
   } = require('../lib/paths');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-chrome-'));
-  const prev = process.env.MOCK_SKILL_DATA_ROOT;
-  process.env.MOCK_SKILL_DATA_ROOT = tmp;
+  const prev = process.env.MOX_DATA_ROOT;
+  process.env.MOX_DATA_ROOT = tmp;
   try {
     const slug = 'no-chrome-leak';
     ensureProjectDirs(slug);
@@ -86,7 +86,7 @@ test('ensureProjectDirs does not create chrome-profiles (no garbage)', () => {
     ensureChromeProfileDir(slug);
     assert.ok(fs.existsSync(chromeProfileDir(slug)));
   } finally {
-    process.env.MOCK_SKILL_DATA_ROOT = prev;
+    process.env.MOX_DATA_ROOT = prev;
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

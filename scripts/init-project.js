@@ -35,8 +35,8 @@ async function initProject(opts = {}) {
   ensureProjectDirs(projectSlug);
   const copiedScenarios = copyBuiltinScenarios(projectSlug);
 
-  console.log(`[mock-skill] init projectDir=${projectDir}`);
-  console.log(`[mock-skill] projectSlug=${projectSlug} taskId=${taskId || 'adhoc'}`);
+  console.log(`[mox] init projectDir=${projectDir}`);
+  console.log(`[mox] projectSlug=${projectSlug} taskId=${taskId || 'adhoc'}`);
 
   const apis = inferApiUsage(projectDir, {
     withUsageIo: true,
@@ -46,10 +46,10 @@ async function initProject(opts = {}) {
   const meta = apis.meta || {};
   // apis is array with meta property
   const apiList = Array.isArray(apis) ? apis : [];
-  console.log(`[mock-skill] discovered ${apiList.length} APIs`);
+  console.log(`[mox] discovered ${apiList.length} APIs`);
   if (meta.gatewayFilteredCount) {
     console.log(
-      `[mock-skill] filtered gateway/base URLs≈${meta.gatewayFilteredCount}`,
+      `[mox] filtered gateway/base URLs≈${meta.gatewayFilteredCount}`,
     );
   }
 
@@ -155,12 +155,12 @@ async function initProject(opts = {}) {
     reportPath,
   });
 
-  console.log(`[mock-skill] report: ${reportPath}`);
+  console.log(`[mox] report: ${reportPath}`);
   if (copiedScenarios.length) {
-    console.log(`[mock-skill] scenarios copied: ${copiedScenarios.map((f) => f.replace(/\.json$/, '')).join(', ')}`);
+    console.log(`[mox] scenarios copied: ${copiedScenarios.map((f) => f.replace(/\.json$/, '')).join(', ')}`);
   }
   console.log(
-    `[mock-skill] done stubs=${stubsTotal} upstreams=${upstreamsTotal} multiHost=${multiHostStubs} empty=${emptyStubs} fidelity=L0:${summary.fidelity.L0}/L1:${summary.fidelity.L1}/L2:${summary.fidelity.L2}/L3:${summary.fidelity.L3} generated=${gen.generated} usageBacked=${gen.usageBackedCount} emptyData=${gen.emptyDataCount} usageBackedHints=${gen.usageBackedHints || 0} emptyDataHints=${gen.emptyDataHints || 0} TRACE_EMPTY=${gen.traceEmptyCount || 0} capturePreserved=${gen.capturePreservedCount || 0} skippedEmpty=${gen.skippedEmptyCount || 0} prunedHandlers=${gen.prunedHandlers || 0} prunedContracts=${gen.prunedContracts || 0} gaps=${(gen.gapApis || []).length}`,
+    `[mox] done stubs=${stubsTotal} upstreams=${upstreamsTotal} multiHost=${multiHostStubs} empty=${emptyStubs} fidelity=L0:${summary.fidelity.L0}/L1:${summary.fidelity.L1}/L2:${summary.fidelity.L2}/L3:${summary.fidelity.L3} generated=${gen.generated} usageBacked=${gen.usageBackedCount} emptyData=${gen.emptyDataCount} usageBackedHints=${gen.usageBackedHints || 0} emptyDataHints=${gen.emptyDataHints || 0} TRACE_EMPTY=${gen.traceEmptyCount || 0} capturePreserved=${gen.capturePreservedCount || 0} skippedEmpty=${gen.skippedEmptyCount || 0} prunedHandlers=${gen.prunedHandlers || 0} prunedContracts=${gen.prunedContracts || 0} gaps=${(gen.gapApis || []).length}`,
   );
 
   if (strictUsage && (gen.traceEmptyCount || 0) > 0) {

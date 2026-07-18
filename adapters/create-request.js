@@ -9,7 +9,7 @@
  *     extract({ content, rel, serviceBases }) -> Api[]
  *   }
  *
- * Load via: mock-skill init --adapter=create-request
+ * Load via: mox init --adapter=create-request
  * Built-in infer already runs createRequest + fetch/axios by default;
  * --adapter adds (or re-runs) a named extractor from adapters/*.js.
  */

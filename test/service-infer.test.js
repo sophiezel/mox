@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-intent-'));
-process.env.MOCK_SKILL_DATA_ROOT = tmpRoot;
+process.env.MOX_DATA_ROOT = tmpRoot;
 
 const {
   inferOperationIntent,
@@ -131,7 +131,7 @@ test('materializeStoreHandlers writes store handlers + models', () => {
   assert.ok(result.rewritten.length >= 1);
   const file = serviceStubHandlerPath('shop', 'POST', '/items');
   assert.ok(fs.existsSync(file));
-  assert.ok(fs.readFileSync(file, 'utf8').includes('mock-skill:store'));
+  assert.ok(fs.readFileSync(file, 'utf8').includes('mox:store'));
 });
 
 test('domain-draft writes md and models', () => {

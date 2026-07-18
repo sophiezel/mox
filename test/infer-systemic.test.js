@@ -30,10 +30,10 @@ function shapeKeys(api) {
   return Object.keys(api?.responseShape?.props || {});
 }
 
-test('infer profile: project .mock-skill/infer.json merges over defaults', () => {
+test('infer profile: project .mox/infer.json merges over defaults', () => {
   withTempProject(
     {
-      '.mock-skill/infer.json': JSON.stringify({
+      '.mox/infer.json': JSON.stringify({
         httpWrappers: [
           {
             callee: '$API',
@@ -165,7 +165,7 @@ export async function load() {
 test('matrix D: custom $API only via project infer.json wrappers', () => {
   withTempProject(
     {
-      '.mock-skill/infer.json': JSON.stringify({
+      '.mox/infer.json': JSON.stringify({
         httpWrappers: [
           {
             callee: '$API',

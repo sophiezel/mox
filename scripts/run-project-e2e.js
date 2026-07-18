@@ -22,7 +22,7 @@ const http = require('http');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const BIN = path.join(ROOT, 'bin', 'mock-skill.js');
+const BIN = path.join(ROOT, 'bin', 'mox.js');
 const FRONTEND_DIR = process.env.FRONTEND_DIR;
 const skipInit = process.argv.includes('--skip-init');
 
@@ -47,7 +47,7 @@ function run(args, opts = {}) {
   if (r.stdout) process.stdout.write(r.stdout);
   if (r.stderr) process.stderr.write(r.stderr);
   if (r.status && r.status !== 0) {
-    throw new Error(`mock-skill ${args.join(' ')} exited ${r.status}`);
+    throw new Error(`mox ${args.join(' ')} exited ${r.status}`);
   }
   return r;
 }

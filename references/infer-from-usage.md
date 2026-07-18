@@ -3,13 +3,13 @@
 ## 产品原则
 
 1. **静态优先**：init 尽量发现接口，并从用法倒推响应字段，使多数常规项目不抓包也能自测主路径。  
-2. **可扩展**：项目差异进 `<projectDir>/.mock-skill/infer.json`（合并 [`config/default.infer.json`](../config/default.infer.json)），不在引擎里为单仓写死。  
+2. **可扩展**：项目差异进 `<projectDir>/.mox/infer.json`（合并 [`config/default.infer.json`](../config/default.infer.json)），不在引擎里为单仓写死。  
 3. **capture-merge = 显式真值写入**：执行该命令时以捕获的真实响应为准（`response.source=usage+capture`）。**不是**补洞/自动兜底。普通 `init`/`generate` **保留**已有 capture；仅 `--overwrite-capture` 允许 usage/jsf 盖掉。裸 `--force` 不擦 capture。  
 4. **禁止臆造字段**：键只来自用法倒推或 capture-merge / OpenAPI；materialize（json-schema-faker）只填值不增键。
 
 ## 默认扫描（无 adapter）
 
-1. **infer profile**：`config/default.infer.json` ← `.mock-skill/infer.json`（pathAliases / httpWrappers / callShapes / importSources / deny）  
+1. **infer profile**：`config/default.infer.json` ← `.mox/infer.json`（pathAliases / httpWrappers / callShapes / importSources / deny）  
 2. **serviceBase**：`config/env` 中 `KEY: 'https://host/prefix'` 记为网关，pathname 深度 ≤1 不生成 mock  
 3. **host 变量**：`src` 内 `apiPrefix = '//host'` 等赋值（含 IIFE 多环境）全部收集；模板 path 按变量 **全环境展开**  
 4. **HTTP CallShape AST（主路径，ts-morph）**：统一识别三种调用形态（非品牌点对点）  
@@ -49,7 +49,7 @@
 | **usageBackedHints / emptyDataHints** | 按 `exportHint` 去重，更接近「多少接口函数」有/无字段 |
 | **gaps** | usage-io 缺口（见下表 Gap 分类学） |
 | **skippedEmpty** | `response.source===empty` 且 `no_export_symbol` → 只写 contract、不渲 handler |
-| **pruned*** | `--force` 时按白名单删除无 `mock-skill:manual` 的孤儿 |
+| **pruned*** | `--force` 时按白名单删除无 `mox:manual` 的孤儿 |
 
 ### Gap 分类学（产品真源，框架无关）
 
@@ -114,7 +114,7 @@
 }
 ```
 
-路径：`<projectDir>/.mock-skill/infer.json`。
+路径：`<projectDir>/.mox/infer.json`。
 
 - `callShapes`：启用的 AST 调用形态（默认三种全开）
 - `importSources`：这些模块的 import 绑定视为 HTTP 客户端（本地名任意，含 `import { request as http }`）
@@ -123,7 +123,7 @@
 ## 可选 adapter
 
 ```bash
-mock-skill init --adapter=create-request
+mox init --adapter=create-request
 ```
 
 - 从 `adapters/<name>.js` 加载；须导出 `{ name, extract({ content, rel, serviceBases }) }`

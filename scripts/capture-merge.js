@@ -116,7 +116,7 @@ function captureMerge(projectSlug, opts = {}) {
   ensureProjectDirs(projectSlug);
   const capturesDir = opts.capturesDir || path.join(projectDataDir(projectSlug), 'captures');
   if (!fs.existsSync(capturesDir)) {
-    console.log('[mock-skill] no captures dir');
+    console.log('[mox] no captures dir');
     return { merged: 0 };
   }
 
@@ -285,7 +285,7 @@ function captureMerge(projectSlug, opts = {}) {
     const { mockHandlerPath } = require('../lib/paths');
     const legacyHandler = mockHandlerPath(projectSlug, host, contract.path);
     for (const file of [handlerFile, legacyHandler]) {
-      if (fs.existsSync(file) && !fs.readFileSync(file, 'utf8').includes('mock-skill:manual')) {
+      if (fs.existsSync(file) && !fs.readFileSync(file, 'utf8').includes('mox:manual')) {
         fs.writeFileSync(file, renderHandler(contract));
       }
     }
@@ -311,10 +311,10 @@ function captureMerge(projectSlug, opts = {}) {
     );
     fs.writeFileSync(report, `${JSON.stringify({ skipped }, null, 2)}\n`);
     console.log(
-      `[mock-skill] capture-merge skipped=${skipped.length} (see ${report})`,
+      `[mox] capture-merge skipped=${skipped.length} (see ${report})`,
     );
   }
-  console.log(`[mock-skill] capture-merge merged=${merged}`);
+  console.log(`[mox] capture-merge merged=${merged}`);
   return { merged, skipped };
 }
 

@@ -3,16 +3,16 @@
 /**
  * Preload for `npm test`: redirect all .data writes to a temp dir so the
  * repo `.data/services` / `.data/projects` are never filled with test junk.
- * Individual tests may still override MOCK_SKILL_DATA_ROOT.
+ * Individual tests may still override MOX_DATA_ROOT.
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-if (!process.env.MOCK_SKILL_DATA_ROOT) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-skill-test-'));
-  process.env.MOCK_SKILL_DATA_ROOT = tmp;
+if (!process.env.MOX_DATA_ROOT) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-test-'));
+  process.env.MOX_DATA_ROOT = tmp;
   const cleanup = () => {
     try {
       fs.rmSync(tmp, { recursive: true, force: true });

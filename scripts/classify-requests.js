@@ -170,6 +170,6 @@ function writeClassifyResult(projectSlug, result) {
 module.exports = { classifyRequests, writeClassifyResult, sanitizeSlug };
 
 if (require.main === module) {
-  console.error('Use via mock-skill classify or init');
+  console.error('Use via mox classify or init');
   process.exit(1);
 }

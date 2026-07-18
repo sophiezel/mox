@@ -109,7 +109,7 @@ test('G2: prune --force removes old FQDN tree, keeps manual', () => {
     fs.mkdirSync(manualDir, { recursive: true });
     fs.writeFileSync(
       path.join(manualDir, 'index.js'),
-      '/** mock-skill:manual */\nmodule.exports = () => ({});\n',
+      '/** mox:manual */\nmodule.exports = () => ({});\n',
     );
 
     const roles = [makeRole()];

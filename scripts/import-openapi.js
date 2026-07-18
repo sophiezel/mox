@@ -2,7 +2,7 @@
 
 /**
  * OpenAPI / Swagger import → classify-compatible roles for generateMocks.
- * Usage: mock-skill import-openapi --from=./openapi.json|yaml [--task=ID]
+ * Usage: mox import-openapi --from=./openapi.json|yaml [--task=ID]
  *
  * Phase 1.5:
  *  - Derives stubId / upstreamId / hosts[] from the spec host (same model as init),
@@ -71,7 +71,7 @@ function extractHost(spec) {
 
 function importOpenApi(opts = {}) {
   const from = opts.from || opts['from'];
-  if (!from) throw new Error('Usage: mock-skill import-openapi --from=<openapi.json|yaml>');
+  if (!from) throw new Error('Usage: mox import-openapi --from=<openapi.json|yaml>');
   const abs = path.resolve(opts.projectDir || process.cwd(), from);
   if (!fs.existsSync(abs)) throw new Error(`OpenAPI file not found: ${abs}`);
 
@@ -179,8 +179,8 @@ function importOpenApi(opts = {}) {
     `openapi-import-${Date.now()}.json`,
   );
   fs.writeFileSync(report, `${JSON.stringify({ roles: roles.length, gen }, null, 2)}\n`);
-  console.log(`[mock-skill] import-openapi roles=${roles.length} generated=${gen.generated}`);
-  console.log(`[mock-skill] report ${report}`);
+  console.log(`[mox] import-openapi roles=${roles.length} generated=${gen.generated}`);
+  console.log(`[mox] report ${report}`);
   return { roles, gen, projectSlug };
 }
 

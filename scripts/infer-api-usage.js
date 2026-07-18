@@ -1275,7 +1275,7 @@ function inferApiUsage(projectDir, opts = {}) {
     });
     all.push(...shapeApis);
   } catch (err) {
-    console.warn(`[mock-skill] call-shapes discover skipped: ${err.message}`);
+    console.warn(`[mox] call-shapes discover skipped: ${err.message}`);
   }
 
   // Count filtered gateway URLs for report
@@ -1346,7 +1346,7 @@ function inferApiUsage(projectDir, opts = {}) {
       enriched = enrichApisWithUsageIo(projectDir, filtered, { inferCfg });
     } catch (err) {
       console.warn(
-        `[mock-skill] usage-io enrich skipped: ${err.message}`,
+        `[mox] usage-io enrich skipped: ${err.message}`,
       );
       enriched = filtered;
     }

@@ -13,19 +13,19 @@
 ### 1. 场景切换
 
 ```bash
-mock-skill start --name=demo --no-auto-launch
+mox start --name=demo --no-auto-launch
 # 另开终端：
-mock-skill scenario e2e-fault --name=demo
-mock-skill smoke --ci --name=demo
-mock-skill stop
+mox scenario e2e-fault --name=demo
+mox smoke --ci --name=demo
+mox stop
 ```
 
 ### 2. 按规则只 mock 一部分
 
 ```bash
-mock-skill start --name=demo --rules my-pack
+mox start --name=demo --rules my-pack
 # 或运行中：
-mock-skill rules use my-pack
+mox rules use my-pack
 ```
 
 <a id="traffic-flags"></a>
@@ -37,10 +37,10 @@ mock-skill rules use my-pack
 
 ```bash
 # 错：
-# mock-skill start --record --traffic=all-mock
+# mox start --record --traffic=all-mock
 # 对：
-mock-skill start --name=demo --record
-mock-skill stop --auto-merge
+mox start --name=demo --record
+mox stop --auto-merge
 ```
 
 ### 4. 真机代理
@@ -48,7 +48,7 @@ mock-skill stop --auto-merge
 <a id="device-proxy"></a>
 
 ```bash
-mock-skill start --name=demo --proxy-host=0.0.0.0 --allow-open-proxy
+mox start --name=demo --proxy-host=0.0.0.0 --allow-open-proxy
 # HTTPS 改写另加：--mitm=1（需信任打印的 CA）
 ```
 

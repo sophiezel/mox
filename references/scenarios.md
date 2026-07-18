@@ -56,8 +56,8 @@ case 形状（向后兼容）：
 CLI：
 
 ```bash
-mock-skill set-scenario e2e-fault
-mock-skill set-case <apiId> <caseId>
+mox set-scenario e2e-fault
+mox set-case <apiId> <caseId>
 ```
 
 内置模板（`init` 时拷贝到项目 scenarios/）：`e2e-happy` / `e2e-fault` / `e2e-slow`。

@@ -7,14 +7,14 @@
 ## 前置
 
 - Node ≥ 18
-- 本仓已 `bash scripts/install.sh` 或 `npm link`，终端能跑 `mock-skill --help`
+- 本仓已 `bash scripts/install.sh` 或 `npm link`，终端能跑 `mox --help`
 
 ## 逐步操作
 
 ### 1. 确认帮助是「主路径」
 
 ```bash
-mock-skill help
+mox help
 ```
 
 应看到 Primary：`init` / `start` / `stop` / `rules` / `scenario` / `smoke`。  
@@ -24,26 +24,26 @@ mock-skill help
 
 ```bash
 cd /path/to/frontend-app
-mock-skill init --name=demo
+mox init --name=demo
 ```
 
 预期：终端打印 generate 摘要；磁盘出现：
 
 - `.data/projects/demo/index.json`（项目索引）
 - `.data/services/<upstreamId>/`（契约 / mocks / proxy-rules；可能多个 upstream）
-- 若识别到 CRUD 簇：对应 handler 可能带 `mock-skill:store`；并有 `domain-draft.md`（静默产物）
+- 若识别到 CRUD 簇：对应 handler 可能带 `mox:store`；并有 `domain-draft.md`（静默产物）
 
 ### 3. 启动
 
 ```bash
-mock-skill start --name=demo
+mox start --name=demo
 # 需要打开页：
-# mock-skill start --name=demo --start-url=http://localhost:8080
+# mox start --name=demo --start-url=http://localhost:8080
 ```
 
 预期日志含：
 
-- `[mock-skill] store reset (use --keep-state to retain)`
+- `[mox] store reset (use --keep-state to retain)`
 - `mock …` 与 `proxy …`
 - `session running — Ctrl+C to stop`
 
@@ -52,18 +52,18 @@ mock-skill start --name=demo
 另开终端：
 
 ```bash
-mock-skill stop
+mox stop
 ```
 
 或在 start 窗口 Ctrl+C。预期含一行：
 
 ```text
-[mock-skill] journal: N hit(s) …
+[mox] journal: N hit(s) …
 ```
 
 ## 如何验收
 
-- [ ] `mock-skill help` Primary 无 service / domain-draft
+- [ ] `mox help` Primary 无 service / domain-draft
 - [ ] `init` 后 `.data/projects/demo/` 与至少一个 `.data/services/*/proxy-rules.json` 存在
 - [ ] `start` 打印 store reset；端口可访问
 - [ ] `stop` 打印 journal 一行（可为 0 hits）
@@ -77,10 +77,10 @@ mock-skill stop
 
 ### 常见失败：port in use
 
-换端口或先 `mock-skill stop`：
+换端口或先 `mox stop`：
 
 ```bash
-mock-skill start --name=demo --mock-port=3910 --proxy-port=19000
+mox start --name=demo --mock-port=3910 --proxy-port=19000
 ```
 
 深入：工具书 [session-and-proxy.md](./session-and-proxy.md)。

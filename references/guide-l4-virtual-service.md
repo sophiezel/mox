@@ -6,14 +6,14 @@
 
 ## 前置
 
-[L3](./guide-l3-service-catalog.md)；init 后存在带 `mock-skill:store` 的 handler（CRUD 簇）。
+[L3](./guide-l3-service-catalog.md)；init 后存在带 `mox:store` 的 handler（CRUD 簇）。
 
 ## 逐步操作
 
 ### 1. 默认每次 start 清空状态
 
 ```bash
-mock-skill start --name=demo
+mox start --name=demo
 # 日志：store reset (use --keep-state to retain)
 ```
 
@@ -22,7 +22,7 @@ mock-skill start --name=demo
 ### 2. 需要跨 start 保留状态时
 
 ```bash
-mock-skill start --name=demo --keep-state
+mox start --name=demo --keep-state
 ```
 
 ### 3. 看 journal 一行（主路径）
@@ -30,19 +30,19 @@ mock-skill start --name=demo --keep-state
 操作若干会命中 store handler 的接口后：
 
 ```bash
-mock-skill stop
+mox stop
 # journal: N hit(s) (upstreamA=…, …)
 ```
 
 ### 4. 需要 JSON 明细时（高级）
 
 ```bash
-mock-skill help --all   # 找到 service 子命令
-mock-skill service journal --limit=20
-mock-skill service status --upstream=<upstreamId>
+mox help --all   # 找到 service 子命令
+mox service journal --limit=20
+mox service status --upstream=<upstreamId>
 ```
 
-运行中清空（高级）：`mock-skill service reset --upstream=<id>` 或省略 upstream 清空全部。
+运行中清空（高级）：`mox service reset --upstream=<id>` 或省略 upstream 清空全部。
 
 ## 如何验收
 

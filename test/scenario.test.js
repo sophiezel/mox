@@ -17,12 +17,12 @@ const SLUG = 'scenario-test-isolated';
 
 function withIsolatedSession(fn) {
   const sessionFile = path.join(os.tmpdir(), `${SLUG}-${Date.now()}-session.json`);
-  const prev = process.env.MOCK_SKILL_SESSION_FILE;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
+  const prev = process.env.MOX_SESSION_FILE;
+  process.env.MOX_SESSION_FILE = sessionFile;
   try {
     return fn();
   } finally {
-    process.env.MOCK_SKILL_SESSION_FILE = prev;
+    process.env.MOX_SESSION_FILE = prev;
     try {
       fs.unlinkSync(sessionFile);
     } catch (_) {

@@ -21,7 +21,7 @@ cat .data/services/<upstreamId>/models.json | head
 
 ### 2. 对照自动 materialize
 
-打开疑似 list/create 的 handler，应含 `mock-skill:store` 注释（确定性 CRUD 簇才会改写；非 CRUD 保持静态 cases）。
+打开疑似 list/create 的 handler，应含 `mox:store` 注释（确定性 CRUD 簇才会改写；非 CRUD 保持静态 cases）。
 
 ### 3. 理解自动 vs 高级重绑
 

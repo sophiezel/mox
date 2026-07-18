@@ -13,16 +13,16 @@
 ## 命令速查
 
 ```bash
-mock-skill help --all
+mox help --all
 ```
 
 | 命令 | 何时用 | 示例 |
 |------|--------|------|
-| `service reset` | 运行中清空 Store（start 已默认清空） | `mock-skill service reset --upstream=api` |
-| `service journal` | 要 JSON 明细而非一行摘要 | `mock-skill service journal --limit=50` |
-| `service status` | 看某 upstream KV/collection 规模 | `mock-skill service status --upstream=api` |
-| `domain-draft` | 刷新/确认域草稿 | `mock-skill domain-draft --upstream=api --confirm` |
-| `materialize-service` | 强制重绑 store handlers | `mock-skill materialize-service --upstream=api --force` |
+| `service reset` | 运行中清空 Store（start 已默认清空） | `mox service reset --upstream=api` |
+| `service journal` | 要 JSON 明细而非一行摘要 | `mox service journal --limit=50` |
+| `service status` | 看某 upstream KV/collection 规模 | `mox service status --upstream=api` |
+| `domain-draft` | 刷新/确认域草稿 | `mox domain-draft --upstream=api --confirm` |
+| `materialize-service` | 强制重绑 store handlers | `mox materialize-service --upstream=api --force` |
 | `classify` / `generate` | 拆开重跑推导 | 见 [L1](./guide-l1-frontend-infer.md) |
 | `traffic` / `list-empty` / `import-openapi` / `export-msw` / `audit` | 精细流量与保真度 | 见 [L2](./guide-l2-runtime.md) 工具书 |
 

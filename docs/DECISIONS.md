@@ -1,4 +1,4 @@
-# mock-skill 定稿决策
+# mox 定稿决策
 
 最后同步：2026-07-19。与 archive 中历史计划不一致时，以本文 + 代码为准。
 
@@ -12,8 +12,8 @@
 | 否决 | **否决**「L0/L1 默认透传真上游」——破坏解耦；录制不得成为日常/E2E 默认路径 |
 | 角色一句话 | **CLI 负责确定性能力；LLM 负责有歧义的语义决策与流程编排；Skill 把边界钉死。** |
 | 仓库 | 本仓（git）；`scripts/install.sh` 一键 `npm link` + 可选 skill symlink |
-| Agent 发现 | 可选 symlink `~/.agents/skills/api-mock-orchestrator` → 本仓（教 Agent 调用 CLI，非产品本体） |
-| CLI | 全局 `mock-skill`（`npm link` / `scripts/install.sh`）— **主产品** |
+| Agent 发现 | 可选 symlink `~/.agents/skills/mox` → 本仓（教 Agent 调用 CLI，非产品本体） |
+| CLI | 全局 `mox`（`npm link` / `scripts/install.sh`）— **主产品** |
 | 运行时 | **路线 A**：编排 + 正向代理 + Mock **全在本仓 Node**；借鉴 WireMock **语义**（delay/fault/HTTP/scenario），**不**引入 WireMock/Java/Docker 运行时 |
 | 业务仓 | 默认零侵入；不改 `baseURL`、不植入 MSW |
 | 耦合边界 | **不**绑定本机绝对路径、公司域名/鉴权头、前端框架、特定请求封装 |
@@ -25,7 +25,7 @@
 | 运行时 | **全局** `.data/session.json` + `.data/runtime.json`（单 mock 服务） |
 | **Service Catalog（真源）** | `.data/services/<upstreamId>/`（mocks / contracts / proxy-rules / upstreams / models） |
 | **Project 索引** | `.data/projects/<projectSlug>/`：`index.json`（发现到的 stub 列表）+ classify / captures / reports / audit / scenarios |
-| Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOCK_SKILL_RULES_DIR`）；跨 project 共享 |
+| Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOX_RULES_DIR`）；跨 project 共享 |
 | 多 catalog | `start --name=a --name=b` 按 **project 索引**展开到 services 合并挂载；省略 `--name` = 全部有 proxy-rules 的 **services**（legacy project proxy-rules 仍可读） |
 | 否决 | 默认「每 project 一份运行时 session / 各起一个代理」；否决「mocks 真源长期挂在 frontend project 下」 |
 | 无 `_project/`、无按 task 拆分的 mock 层 | 已否决 |
@@ -44,7 +44,7 @@
 | 域模型草稿 | `init`/`generate` **静默**写 `models.json` / `domain-draft.md`；高级 `domain-draft` / `materialize-service` 仅用于重绑与排障；表结构 = 虚拟实体 schema，不连真库 |
 | Journal | 命中 Virtual Service 时记入内存并落盘 `.data/service-journal.json`；**`stop` / Ctrl+C 打印一行摘要**；明细用 `service journal` |
 | Catalog 解析真源 | **统一**走 `lib/catalog-merge`：`loadContractsForCatalog` / `handlerExistsForContract` / `listMockKeysForCatalog` / `mocksRootFor`；smoke、list-empty、export-msw、classify/generate 不得再各自假设 `projects/*/mocks` |
-| `start --detach` | 父进程 spawn 独立子进程（`detached`），写 `runtime.json` pid；父进程退出后 session 仍存活；结束用 `mock-skill stop` |
+| `start --detach` | 父进程 spawn 独立子进程（`detached`），写 `runtime.json` pid；父进程退出后 session 仍存活；结束用 `mox stop` |
 | 全链 E2E | 通用 `scripts/run-project-e2e.js`（`FRONTEND_DIR` + `MOCK_NAME`）；产品码禁止公司路径/域名硬编码 |
 | 保真度 L3 | store 或 scenario 生效且可 reset |
 

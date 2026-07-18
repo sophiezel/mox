@@ -29,8 +29,8 @@ test('session config: proxy.host=0.0.0.0 is parseable from defaults merge', () =
 test('setScenario persists scenario name for session Wi‑Fi block', () => {
   const slug = `proxy-host-test-${Date.now()}`;
   const sessionFile = path.join(os.tmpdir(), `${slug}-session.json`);
-  const prev = process.env.MOCK_SKILL_SESSION_FILE;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
+  const prev = process.env.MOX_SESSION_FILE;
+  process.env.MOX_SESSION_FILE = sessionFile;
   try {
     ensureProjectDirs(slug);
     copyBuiltinScenarios(slug);
@@ -38,7 +38,7 @@ test('setScenario persists scenario name for session Wi‑Fi block', () => {
     const cfg = loadSession(slug);
     assert.equal(cfg.scenario, 'e2e-fault');
   } finally {
-    process.env.MOCK_SKILL_SESSION_FILE = prev;
+    process.env.MOX_SESSION_FILE = prev;
     try {
       fs.unlinkSync(sessionFile);
     } catch (_) {

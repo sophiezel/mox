@@ -1,6 +1,6 @@
 # Generate mock
 
-`mock-skill generate` (also run by `init`) materializes:
+`mox generate` (also run by `init`) materializes:
 
 1. `contracts/<apiKey>.json` — schema + full standard cases
 2. `mocks/<host>/<path>/index.js` — handler (skipped when empty+weak coverage)
@@ -27,14 +27,14 @@ Enum-backed extra cases may be appended (capped).
 
 - **Do not invent response fields** — keys only from usage-io / OpenAPI / capture-merge
 - Faker fills values for existing keys only (fixed seed)
-- Files containing `mock-skill:manual` are never overwritten
+- Files containing `mox:manual` are never overwritten
 - `force` regenerates and may prune handlers not in the whitelist
 
 ## Switching cases
 
 ```bash
-mock-skill set-case "GET api.example.com/v1/users" http_500
-mock-skill set-scenario e2e-fault
+mox set-case "GET api.example.com/v1/users" http_500
+mox set-scenario e2e-fault
 ```
 
 Scenario JSON may also include light stateful config:

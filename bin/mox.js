@@ -65,39 +65,39 @@ function parseArgs(argv) {
 
 function help(full = false) {
   const primary = `
-mock-skill — frontend API mock CLI (single proxy, multi catalog)
+mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
-  mock-skill init [projectDir] [--name=slug] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mock-skill start [--name=slug…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=1] [--keep-state] [--detach]
-  mock-skill stop [--auto-merge]
-  mock-skill rules list|use <kw…>|save <name> [--rules-dir=DIR]
-  mock-skill scenario <name> [--name=slug]
-  mock-skill smoke [--name=slug] [--ci] [--cases=...] [--scenario=NAME]
+  mox init [projectDir] [--name=slug] [--task=ID] [--adapter=name] [--force] [--strict-usage]
+  mox start [--name=slug…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=1] [--keep-state] [--detach]
+  mox stop [--auto-merge]
+  mox rules list|use <kw…>|save <name> [--rules-dir=DIR]
+  mox scenario <name> [--name=slug]
+  mox smoke [--name=slug] [--ci] [--cases=...] [--scenario=NAME]
 
 Optional (needs real upstream; not for E2E):
-  mock-skill start --record [--name=slug…]
-  mock-skill record | mock
-  mock-skill merge [--name=slug]
+  mox start --record [--name=slug…]
+  mox record | mock
+  mox merge [--name=slug]
 `;
 
   const advanced = `
 Advanced / legacy (see references/guide-l6-advanced.md):
-  mock-skill service reset|journal|status [--upstream=ID]
-  mock-skill domain-draft --upstream=ID [--confirm]
-  mock-skill materialize-service --upstream=ID [--force]
-  mock-skill classify [--task=ID] [--related-from=path]
-  mock-skill generate [--task=ID] [--force] [--overwrite-capture]
-  mock-skill session start|stop [...]
-  mock-skill set-case <apiId> <caseId>
-  mock-skill set-scenario <name>
-  mock-skill traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]
-  mock-skill capture-merge [...]
-  mock-skill list-empty [--gap=GAP] [--all]
-  mock-skill import-openapi --from=<spec>
-  mock-skill export-msw [--out=path]
-  mock-skill audit [--task=ID] [--api=host/path]
-  mock-skill install | uninstall
+  mox service reset|journal|status [--upstream=ID]
+  mox domain-draft --upstream=ID [--confirm]
+  mox materialize-service --upstream=ID [--force]
+  mox classify [--task=ID] [--related-from=path]
+  mox generate [--task=ID] [--force] [--overwrite-capture]
+  mox session start|stop [...]
+  mox set-case <apiId> <caseId>
+  mox set-scenario <name>
+  mox traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]
+  mox capture-merge [...]
+  mox list-empty [--gap=GAP] [--all]
+  mox import-openapi --from=<spec>
+  mox export-msw [--out=path]
+  mox audit [--task=ID] [--api=host/path]
+  mox install | uninstall
 
 Session security:
   --allow-open-proxy   permit passthrough/CONNECT when binding 0.0.0.0 (default: reject)
@@ -110,7 +110,7 @@ Flags:
   --record             alone: all-passthrough; with --rules: record passthrough only
   --auto-merge         with stop: run capture-merge after stop
   --keep-state         with start: do not reset Virtual Service store / journal
-  --detach             with start: spawn background session (survives shell exit); stop via mock-skill stop
+  --detach             with start: spawn background session (survives shell exit); stop via mox stop
 `;
 
   const footer = `
@@ -118,14 +118,14 @@ Install: bash scripts/install.sh
 Catalog: .data/services/<upstreamId>/   Project index: .data/projects/<slug>/
 Session: .data/session.json   Rules: rules/
 Learn:   references/learning-path.md  (L0→L6 layered guides)
-Help:    mock-skill help --all
+Help:    mox help --all
 `;
 
   console.log(
     full
       ? primary + advanced + footer
       : primary +
-          `\n  mock-skill help --all   # advanced commands (service / domain-draft / …)\n` +
+          `\n  mox help --all   # advanced commands (service / domain-draft / …)\n` +
           footer,
   );
 }
@@ -140,7 +140,7 @@ function hintForError(message) {
   if (/port in use|EADDRINUSE/i.test(m)) {
     return 'see: references/guide-l0-getting-started.md#port-in-use';
   }
-  if (/no classify|classify result|run mock-skill init/i.test(m)) {
+  if (/no classify|classify result|run mox init/i.test(m)) {
     return 'see: references/guide-l1-frontend-infer.md#no-classify';
   }
   if (/mutually exclusive|--rules forces|conflicting --traffic/i.test(m)) {
@@ -172,14 +172,14 @@ function resolveStartTraffic(f) {
   if (wantRules) {
     if (wantRecord) {
       console.log(
-        '[mock-skill] --record with --rules: selective mock + record passthrough',
+        '[mox] --record with --rules: selective mock + record passthrough',
       );
     }
     return null;
   }
   if (wantRecord) {
     console.log(
-      '[mock-skill] mode=record (all-passthrough; optional fidelity upgrade — not for E2E)',
+      '[mox] mode=record (all-passthrough; optional fidelity upgrade — not for E2E)',
     );
     return 'all-passthrough';
   }
@@ -214,7 +214,7 @@ async function runSessionStart(f) {
     const outFd = fs.openSync(logPath, 'a');
     const child = spawn(
       process.execPath,
-      [path.join(__dirname, 'mock-skill.js'), ...childArgs],
+      [path.join(__dirname, 'mox.js'), ...childArgs],
       {
         detached: true,
         stdio: ['ignore', outFd, outFd],
@@ -242,16 +242,16 @@ async function runSessionStart(f) {
       }
     }
     console.log(
-      `[mock-skill] detached pid=${child.pid} (stop with: mock-skill stop) log=${logPath}`,
+      `[mox] detached pid=${child.pid} (stop with: mox stop) log=${logPath}`,
     );
     if (state?.mock?.port) {
       console.log(
-        `[mock-skill] mock http://${state.mock.host || '127.0.0.1'}:${state.mock.port}`,
+        `[mox] mock http://${state.mock.host || '127.0.0.1'}:${state.mock.port}`,
       );
     }
     if (state?.proxy?.enabled && state.proxy.port) {
       console.log(
-        `[mock-skill] proxy http://${state.proxy.host || '127.0.0.1'}:${state.proxy.port}`,
+        `[mox] proxy http://${state.proxy.host || '127.0.0.1'}:${state.proxy.port}`,
       );
     }
     return;
@@ -404,7 +404,7 @@ async function main() {
     });
     const file = writeClassifyResult(projectSlug, result);
     console.log(
-      `[mock-skill] wrote ${file} (${result.roles.length} roles, ${result.conflicts.length} conflicts)`,
+      `[mox] wrote ${file} (${result.roles.length} roles, ${result.conflicts.length} conflicts)`,
     );
     return;
   }
@@ -417,7 +417,7 @@ async function main() {
     const projectSlug = resolveProjectSlug(projectDir, f.name);
     const rolesFile = path.join(projectDataDir(projectSlug), 'classify', 'request-roles.json');
     if (!fs.existsSync(rolesFile)) {
-      throw new Error('no classify result — run mock-skill init or classify first');
+      throw new Error('no classify result — run mox init or classify first');
     }
     const classified = JSON.parse(fs.readFileSync(rolesFile, 'utf8'));
     const gen = generateMocks({
@@ -429,7 +429,7 @@ async function main() {
       merge: !f.force,
       overwriteCapture: Boolean(f['overwrite-capture']),
     });
-    console.log(`[mock-skill] generate`, gen);
+    console.log(`[mox] generate`, gen);
     return;
   }
 
@@ -465,7 +465,7 @@ async function main() {
       });
       return;
     }
-    console.error('Usage: mock-skill rules list|use <kw…>|save <name>');
+    console.error('Usage: mox rules list|use <kw…>|save <name>');
     process.exit(1);
   }
   if (cmd === 'service') {
@@ -510,7 +510,7 @@ async function main() {
       runSessionStop(f);
       return;
     }
-    console.error('Usage: mock-skill session start|stop');
+    console.error('Usage: mox session start|stop');
     process.exit(1);
   }
 
@@ -562,7 +562,7 @@ async function main() {
     const projectSlug = resolveProjectSlug(process.cwd(), f.name);
     const rows = readAudit(projectSlug, { taskId: f.task, api: f.api });
     console.log(JSON.stringify(rows, null, 2));
-    console.log(`[mock-skill] ${rows.length} audit rows`);
+    console.log(`[mox] ${rows.length} audit rows`);
     return;
   }
 
@@ -587,10 +587,10 @@ async function main() {
     }
     const rows = listEmptyStubs(projectSlug, { gap: f.gap || null });
     if (!rows.length) {
-      console.log('[mock-skill] no empty stubs — all stubs have shape or capture');
+      console.log('[mox] no empty stubs — all stubs have shape or capture');
       return;
     }
-    console.log(`[mock-skill] ${rows.length} empty stub(s) needing capture-merge / import-openapi:`);
+    console.log(`[mox] ${rows.length} empty stub(s) needing capture-merge / import-openapi:`);
     for (const r of rows) {
       console.log(
         `- ${r.stubId} [${r.fidelity}]${r.gaps.length ? ` gaps=${r.gaps.join(',')}` : ''}${r.exportHint ? ` export=${r.exportHint}` : ''}`,
@@ -623,18 +623,18 @@ async function main() {
     return;
   }
 
-  console.error(`[mock-skill] unknown command: ${cmd}`);
+  console.error(`[mox] unknown command: ${cmd}`);
   const hint = hintForError('unknown command');
-  if (hint) console.error(`[mock-skill] ${hint}`);
+  if (hint) console.error(`[mox] ${hint}`);
   help();
   process.exit(1);
 }
 
 if (require.main === module) {
   main().catch((e) => {
-    console.error(`[mock-skill] error: ${e.message}`);
+    console.error(`[mox] error: ${e.message}`);
     const hint = hintForError(e.message);
-    if (hint) console.error(`[mock-skill] ${hint}`);
+    if (hint) console.error(`[mox] ${hint}`);
     process.exit(1);
   });
 }

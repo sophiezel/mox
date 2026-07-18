@@ -52,10 +52,10 @@ function hintMergeIfCaptures(projectSlug) {
   const n = countCaptureFiles(projectSlug);
   if (n > 0) {
     console.log(
-      `[mock-skill] hint: ${n} capture file(s) in ${projectSlug} — run: mock-skill merge --name=${projectSlug}`,
+      `[mox] hint: ${n} capture file(s) in ${projectSlug} — run: mox merge --name=${projectSlug}`,
     );
     console.log(
-      `[mock-skill] hint: or next time: mock-skill stop --auto-merge`,
+      `[mox] hint: or next time: mox stop --auto-merge`,
     );
   }
   return n;
@@ -78,7 +78,7 @@ function stopSession(opts = {}) {
   const primary = (state && state.projectSlug) || catalogs[0] || hintSlug;
 
   if (!state) {
-    console.log('[mock-skill] no runtime state; nothing to stop');
+    console.log('[mox] no runtime state; nothing to stop');
     const journal = journalSummary();
     console.log(journal.line);
     let captureCount = 0;
@@ -137,7 +137,7 @@ function stopSession(opts = {}) {
     summary: `stop killedSession=${killedSession} killedChrome=${killedChrome} catalogs=${catalogs.join(',')}`,
   });
   console.log(
-    `[mock-skill] stop catalogs=${catalogs.join(',')} sessionPid=${sessionPid || '-'} killed=${killedSession} chromePid=${chromePid || '-'} killed=${killedChrome}`,
+    `[mox] stop catalogs=${catalogs.join(',')} sessionPid=${sessionPid || '-'} killed=${killedSession} chromePid=${chromePid || '-'} killed=${killedChrome}`,
   );
 
   const journal = journalSummary();

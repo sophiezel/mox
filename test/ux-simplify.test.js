@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { help, hintForError } = require('../bin/mock-skill');
+const { help, hintForError } = require('../bin/mox');
 const {
   getStore,
   resetStore,
@@ -41,17 +41,17 @@ test('help primary omits service/domain-draft; --all includes them', () => {
   try {
     help(false);
     const primary = lines.join('\n');
-    assert.ok(primary.includes('mock-skill init'));
+    assert.ok(primary.includes('mox init'));
     assert.ok(primary.includes('learning-path.md'));
-    assert.ok(!primary.includes('mock-skill service reset'));
-    assert.ok(!primary.includes('mock-skill domain-draft'));
+    assert.ok(!primary.includes('mox service reset'));
+    assert.ok(!primary.includes('mox domain-draft'));
     assert.ok(primary.includes('help --all'));
 
     lines.length = 0;
     help(true);
     const full = lines.join('\n');
-    assert.ok(full.includes('mock-skill service reset'));
-    assert.ok(full.includes('mock-skill domain-draft'));
+    assert.ok(full.includes('mox service reset'));
+    assert.ok(full.includes('mox domain-draft'));
     assert.ok(full.includes('--keep-state'));
     assert.ok(full.includes('guide-l6-advanced.md'));
   } finally {
@@ -61,7 +61,7 @@ test('help primary omits service/domain-draft; --all includes them', () => {
 
 test('hintForError maps common failures to guide anchors', () => {
   assert.match(hintForError('mock port in use: 127.0.0.1:3900'), /guide-l0/);
-  assert.match(hintForError('no classify result — run mock-skill init'), /guide-l1/);
+  assert.match(hintForError('no classify result — run mox init'), /guide-l1/);
   assert.match(
     hintForError('--record and --traffic= are mutually exclusive'),
     /guide-l2/,
@@ -76,8 +76,8 @@ test('journal persists to disk for cross-process stop summary', () => {
     os.tmpdir(),
     `mock-journal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`,
   );
-  const prev = process.env.MOCK_SKILL_JOURNAL_FILE;
-  process.env.MOCK_SKILL_JOURNAL_FILE = journalFile;
+  const prev = process.env.MOX_JOURNAL_FILE;
+  process.env.MOX_JOURNAL_FILE = journalFile;
   const {
     appendJournal,
     journalSummary,
@@ -107,7 +107,7 @@ test('journal persists to disk for cross-process stop summary', () => {
     assert.equal(summary.hits, 2);
     assert.match(summary.line, /journal: 2 hit/);
   } finally {
-    process.env.MOCK_SKILL_JOURNAL_FILE = prev;
+    process.env.MOX_JOURNAL_FILE = prev;
     try {
       fs.unlinkSync(journalFile);
     } catch {
@@ -122,8 +122,8 @@ test('resetStore(*) clears journal file', () => {
     os.tmpdir(),
     `mock-journal-reset-${Date.now()}.json`,
   );
-  const prev = process.env.MOCK_SKILL_JOURNAL_FILE;
-  process.env.MOCK_SKILL_JOURNAL_FILE = journalFile;
+  const prev = process.env.MOX_JOURNAL_FILE;
+  process.env.MOX_JOURNAL_FILE = journalFile;
   try {
     _resetAllForTests();
     appendJournal({ stubId: 'GET a/x', method: 'GET', path: '/x', upstreamId: 'a' });
@@ -132,7 +132,7 @@ test('resetStore(*) clears journal file', () => {
     assert.ok(!fs.existsSync(journalFile));
     assert.equal(readJournal(10).length, 0);
   } finally {
-    process.env.MOCK_SKILL_JOURNAL_FILE = prev;
+    process.env.MOX_JOURNAL_FILE = prev;
     _resetAllForTests();
   }
 });
@@ -144,12 +144,12 @@ test('stopSession prints journal one-liner', () => {
   );
   const runtimeFile = path.join(os.tmpdir(), `mock-runtime-stop-${Date.now()}.json`);
   const sessionFile = path.join(os.tmpdir(), `mock-session-stop-${Date.now()}.json`);
-  const prevJ = process.env.MOCK_SKILL_JOURNAL_FILE;
-  const prevR = process.env.MOCK_SKILL_RUNTIME_FILE;
-  const prevS = process.env.MOCK_SKILL_SESSION_FILE;
-  process.env.MOCK_SKILL_JOURNAL_FILE = journalFile;
-  process.env.MOCK_SKILL_RUNTIME_FILE = runtimeFile;
-  process.env.MOCK_SKILL_SESSION_FILE = sessionFile;
+  const prevJ = process.env.MOX_JOURNAL_FILE;
+  const prevR = process.env.MOX_RUNTIME_FILE;
+  const prevS = process.env.MOX_SESSION_FILE;
+  process.env.MOX_JOURNAL_FILE = journalFile;
+  process.env.MOX_RUNTIME_FILE = runtimeFile;
+  process.env.MOX_SESSION_FILE = sessionFile;
   const logs = [];
   const orig = console.log;
   console.log = (...a) => logs.push(a.join(' '));
@@ -166,9 +166,9 @@ test('stopSession prints journal one-liner', () => {
     assert.ok(logs.some((l) => /journal: 1 hit/.test(l)));
   } finally {
     console.log = orig;
-    process.env.MOCK_SKILL_JOURNAL_FILE = prevJ;
-    process.env.MOCK_SKILL_RUNTIME_FILE = prevR;
-    process.env.MOCK_SKILL_SESSION_FILE = prevS;
+    process.env.MOX_JOURNAL_FILE = prevJ;
+    process.env.MOX_RUNTIME_FILE = prevR;
+    process.env.MOX_SESSION_FILE = prevS;
     for (const f of [journalFile, runtimeFile, sessionFile]) {
       try {
         fs.unlinkSync(f);

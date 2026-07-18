@@ -28,7 +28,7 @@
 ### 3. 多 catalog 挂载
 
 ```bash
-mock-skill start --name=tower --name=other
+mox start --name=tower --name=other
 # 省略 --name = 挂载全部可解析 catalog
 ```
 

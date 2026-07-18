@@ -2,14 +2,17 @@
 
 ## Unreleased
 
+### Changed
+- Product rename to **mox**: CLI / npm package / Agent Skill / env `MOX_*` / project config `.mox/` / handler markers `mox:manual` | `mox:store` (hard cut, no legacy aliases).
+
 ### Added
 - Unified catalog resolve APIs in `lib/catalog-merge` (`loadContractsForCatalog`, `handlerExistsForContract`, `listMockKeysForCatalog`, `mocksRootFor`); smoke / list-empty / export-msw / generate read service truth, not project-only mocks
-- `mock-skill start --detach` for background sessions (survives shell exit; stop via `mock-skill stop`)
+- `mox start --detach` for background sessions (survives shell exit; stop via `mox stop`)
 - `scripts/run-project-e2e.js` manual full-chain E2E (`FRONTEND_DIR` + `MOCK_NAME`)
 - Silent main path UX: `start` default `resetStore`, `stop` journal one-liner, layered L0–L6 guides
 - `docs/REPO_MAP.md` repository inventory (KEEP / UPDATE / DELETE / MANUAL)
 - Store-backed handlers expose full standard cases (`http_401`…`dep_fail`/`slow`); detail/delete soft-fill when store miss so smoke/CI stay green
-- `test:smoke` isolates via `MOCK_SKILL_DATA_ROOT` (same as unit tests)
+- `test:smoke` isolates via `MOX_DATA_ROOT` (same as unit tests)
 
 ### Fixed
 - `start` no longer creates empty `.data/services/<projectSlug>/` shells; `ensureServiceDirs` only runs for real upstreamIds from the project index

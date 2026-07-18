@@ -13,7 +13,7 @@
 ### 1. 看项目索引
 
 ```bash
-# 仓库根或任意目录（数据在 MOCK_SKILL_DATA_ROOT / 本仓 .data）
+# 仓库根或任意目录（数据在 MOX_DATA_ROOT / 本仓 .data）
 ls .data/projects/demo/
 cat .data/projects/demo/classify/request-roles.json | head
 ```
@@ -40,8 +40,8 @@ ls .data/services/<upstreamId>/mocks | head
 主路径已由 `init` 串好。排障时：
 
 ```bash
-mock-skill classify --name=demo
-mock-skill generate --name=demo
+mox classify --name=demo
+mox generate --name=demo
 ```
 
 <a id="no-classify"></a>
