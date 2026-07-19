@@ -24,9 +24,9 @@
 |----|------|
 | 运行时 | **全局** `.data/session.json` + `.data/runtime.json`（单 mock 服务） |
 | **Service Catalog（真源）** | `.data/services/<upstreamId>/`（mocks / contracts / proxy-rules / upstreams / models） |
-| **Project 索引** | `.data/projects/<projectSlug>/`：`index.json`（发现到的 stub 列表）+ classify / captures / reports / audit / scenarios |
+| **Project 索引** | `.data/projects/<projectSlug>/`：`index.json`（发现到的 stub 列表）+ classify / captures / reports / audit / scenarios（**不含** mocks/contracts 真源；不再双写聚合 proxy-rules / upstreams） |
 | Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOX_RULES_DIR`）；跨 project 共享 |
-| 多 catalog | `start --name=a --name=b` 按 **project 索引**展开到 services 合并挂载；省略 `--name` = 全部有 proxy-rules 的 **services**（legacy project proxy-rules 仍可读） |
+| 多 catalog | `start --name=a --name=b` 按 **project 索引**展开到 services 合并挂载；省略 `--name` = 全部有 proxy-rules 的 **services**（磁盘上残留的 legacy project proxy-rules 仍可读，generate 不再写入） |
 | 否决 | 默认「每 project 一份运行时 session / 各起一个代理」；否决「mocks 真源长期挂在 frontend project 下」 |
 | 无 `_project/`、无按 task 拆分的 mock 层 | 已否决 |
 | `--task` | 仅审计/溯源（`lastTaskId`、`audit/changelog.jsonl`、契约 history），不分区存储 |

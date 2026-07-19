@@ -7,9 +7,7 @@ const {
   ensureServiceDirs,
   projectDataDir,
   serviceDataDir,
-  contractPath,
   serviceContractPath,
-  mockHandlerPath,
   stubHandlerPath,
   serviceStubHandlerPath,
   stubId: makeStubId,
@@ -726,10 +724,6 @@ function generateMocks({
     const cPath = serviceContractPath(upstreamId, key);
     fs.mkdirSync(path.dirname(cPath), { recursive: true });
     fs.writeFileSync(cPath, `${JSON.stringify(contract, null, 2)}\n`);
-    // Mirror under project for legacy readers / reports
-    const legacyC = contractPath(projectSlug, key);
-    fs.mkdirSync(path.dirname(legacyC), { recursive: true });
-    fs.writeFileSync(legacyC, `${JSON.stringify(contract, null, 2)}\n`);
     keepContractKeys.add(key);
     stubIds.push(key);
     upstreamIds.add(sanitizeUpstreamId(upstreamId));
@@ -919,35 +913,11 @@ function generateMocks({
     );
   }
 
-  // Project index + legacy aggregate proxy-rules for discoverability
+  // Frontend discovery index only (no catalog dual-write under projects/)
   writeProjectIndex(projectSlug, {
     stubs: stubIds,
     upstreams: [...upstreamIds],
   });
-  const rulesPath = path.join(projectDataDir(projectSlug), 'proxy-rules.json');
-  fs.writeFileSync(rulesPath, `${JSON.stringify(rules, null, 2)}\n`);
-
-  const upstreamsMap = {};
-  for (const roleEntry of filteredRoles) {
-    const up = sanitizeUpstreamId(
-      roleEntry.upstreamId ||
-        deriveUpstreamId({
-          hostVar: roleEntry.hostVar,
-          hosts: roleEntry.hosts || [roleEntry.host].filter(Boolean),
-        }) ||
-        '_default',
-    );
-    const h = roleEntry.hosts || (roleEntry.host && roleEntry.host !== '_default' ? [roleEntry.host] : []);
-    const ch = roleEntry.canonicalHost || (h.length ? pickCanonicalHost(h, up) : null);
-    if (!upstreamsMap[up] || (h.length > upstreamsMap[up].hosts.length)) {
-      upstreamsMap[up] = { hosts: h, canonicalHost: ch };
-    }
-  }
-  const upstreamsPath = path.join(projectDataDir(projectSlug), 'upstreams.json');
-  fs.writeFileSync(
-    upstreamsPath,
-    `${JSON.stringify({ version: 1, upstreams: upstreamsMap }, null, 2)}\n`,
-  );
 
   if (force) {
     const keepHandlerKeys = new Set(rules.map((r) => r.id));
@@ -1012,7 +982,8 @@ function generateMocks({
     skipped,
     blocked,
     reused,
-    rulesPath,
+    // Project aggregate proxy-rules no longer written; truth is services/<up>/proxy-rules.json
+    rulesPath: null,
     removedGateway,
     usageBackedCount,
     emptyDataCount,

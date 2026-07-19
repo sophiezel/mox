@@ -11,15 +11,12 @@ const {
   projectDataDir,
   serviceDataDir,
   stubHandlerPath,
-  contractPath,
-  stubId,
+  serviceContractPath,
 } = require('../lib/paths');
 
 function withTempProject(fn) {
   const slug = `gen-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   try {
     return fn(slug);
@@ -72,23 +69,26 @@ test('G1: generate writes handler at stubHandlerPath (no FQDN dir), rule.hosts>=
       'handler lives under services catalog',
     );
 
-    // No FQDN directory under project mocks
-    const mocksRoot = path.join(projectDataDir(slug), 'mocks');
-    const entries = fs.existsSync(mocksRoot) ? fs.readdirSync(mocksRoot) : [];
-    assert.ok(!entries.includes('svc-a.example.com'), 'no FQDN directory');
+    // No dual-write catalog shells under projects/
+    const proj = projectDataDir(slug);
+    assert.ok(!fs.existsSync(path.join(proj, 'mocks')) || fs.readdirSync(path.join(proj, 'mocks')).length === 0);
+    assert.ok(!fs.existsSync(path.join(proj, 'contracts')));
+    assert.ok(!fs.existsSync(path.join(proj, 'proxy-rules.json')));
+    assert.ok(!fs.existsSync(path.join(proj, 'upstreams.json')));
+    assert.ok(fs.existsSync(path.join(proj, 'index.json')), 'project index retained');
     assert.ok(fs.existsSync(serviceDataDir('svc-a')), 'service catalog exists');
 
-    // proxy-rules: 1 rule with hosts.length>=2
+    // proxy-rules under service
     const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('svc-a'), 'proxy-rules.json'), 'utf8'),
     );
     assert.equal(rules.length, 1);
     assert.ok(rules[0].hosts?.length >= 2, `rule.hosts should have >=2, got ${JSON.stringify(rules[0].hosts)}`);
     assert.ok(rules[0].stubId, 'rule should have stubId');
     assert.ok(rules[0].upstreamId, 'rule should have upstreamId');
 
-    // upstreams.json written
-    const upstreamsPath = path.join(projectDataDir(slug), 'upstreams.json');
+    // upstreams.json under service
+    const upstreamsPath = path.join(serviceDataDir('svc-a'), 'upstreams.json');
     assert.ok(fs.existsSync(upstreamsPath), 'upstreams.json should exist');
     const upstreams = JSON.parse(fs.readFileSync(upstreamsPath, 'utf8'));
     assert.ok(upstreams.upstreams?.['svc-a'], 'svc-a upstream exists');
@@ -99,12 +99,12 @@ test('G1: generate writes handler at stubHandlerPath (no FQDN dir), rule.hosts>=
 test('G2: prune --force removes old FQDN tree, keeps manual', () => {
   withTempProject((slug) => {
     const mocksRoot = path.join(projectDataDir(slug), 'mocks');
-    // Create an old-style FQDN handler
+    // Create an old-style FQDN handler (legacy residue)
     const oldFqdnDir = path.join(mocksRoot, 'svc-a.example.com', 'GET', 'v1', 'items');
     fs.mkdirSync(oldFqdnDir, { recursive: true });
     fs.writeFileSync(path.join(oldFqdnDir, 'index.js'), 'module.exports = () => ({});\n');
 
-    // Create a manual handler under the new layout
+    // Create a manual handler under the legacy project layout
     const manualDir = path.join(mocksRoot, 'svc-a', 'GET', 'v1', 'manual');
     fs.mkdirSync(manualDir, { recursive: true });
     fs.writeFileSync(
@@ -148,13 +148,14 @@ test('G3: skippedEmpty — no_export_symbol writes contract only, no handler/rul
     assert.equal(gen.skippedEmptyCount, 1);
     assert.equal(gen.generated, 0);
 
-    const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
-    );
-    assert.equal(rules.length, 0, 'no_export_symbol must not enter proxy-rules');
+    const rulesPath = path.join(serviceDataDir('svc-a'), 'proxy-rules.json');
+    if (fs.existsSync(rulesPath)) {
+      const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      assert.equal(rules.length, 0, 'no_export_symbol must not enter proxy-rules');
+    }
 
-    // Contract should still be written
-    const cPath = contractPath(slug, 'GET svc-a/v1/orphan');
+    // Contract should still be written under services/
+    const cPath = serviceContractPath('svc-a', 'GET svc-a/v1/orphan');
     assert.ok(fs.existsSync(cPath), 'contract should be written');
 
     // Handler should NOT exist
@@ -168,7 +169,7 @@ test('contract schema includes stubId, upstreamId, hosts, canonicalHost', () => 
     const roles = [makeRole()];
     generateMocks({ projectSlug: slug, roles, force: true, merge: false });
 
-    const cPath = contractPath(slug, 'GET svc-a/v1/items');
+    const cPath = serviceContractPath('svc-a', 'GET svc-a/v1/items');
     const contract = JSON.parse(fs.readFileSync(cPath, 'utf8'));
     assert.equal(contract.id, 'GET svc-a/v1/items');
     assert.equal(contract.stubId, 'GET svc-a/v1/items');
@@ -199,13 +200,27 @@ test('contract schema stamps fidelity (L1 for usage shape, L0 for empty)', () =>
     });
 
     const shapeContract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     assert.equal(shapeContract.fidelity, 'L1', 'usage-backed shape → L1');
 
     const emptyContract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/empty'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/empty'), 'utf8'),
     );
     assert.equal(emptyContract.fidelity, 'L0', 'empty shape → L0');
+  });
+});
+
+test('generate leaves projects/<slug> thin (no catalog dual-write)', () => {
+  withTempProject((slug) => {
+    generateMocks({ projectSlug: slug, roles: [makeRole()], force: true, merge: false });
+    const base = projectDataDir(slug);
+    assert.ok(fs.existsSync(path.join(base, 'index.json')));
+    for (const banned of ['mocks', 'contracts', 'proxy-rules.json', 'upstreams.json']) {
+      assert.ok(
+        !fs.existsSync(path.join(base, banned)),
+        `should not create projects/.../${banned}`,
+      );
+    }
   });
 });

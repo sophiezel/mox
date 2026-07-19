@@ -109,8 +109,8 @@ rules/                         共享 rule 包（可 git；不绑 project）
     domain-draft.md            init/generate 静默草稿（高级可重跑）
   projects/<projectSlug>/      前端发现索引 + 项目侧产物
     index.json                 stubs[] / upstreams[]
-    classify/ captures/ reports/ audit/ scenarios/
-    proxy-rules.json           legacy 兼容（generate 仍可写聚合视图）
+    classify/ captures/ reports/ audit/ scenarios/ exports/
+    # 不再写入: mocks/ contracts/ proxy-rules.json upstreams.json（真源在 services/）
 ```
 
 - **一个** proxy + mock 进程；`start --name=a --name=b` 按 project 索引展开到 services。

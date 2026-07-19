@@ -4,20 +4,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { projectDataDir, stubHandlerPath, contractPath } = require('../lib/paths');
+const { projectDataDir, stubHandlerPath, serviceDataDir, serviceContractPath } = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
 
 function withTempProject(fn) {
   const slug = `cap-gap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   fs.mkdirSync(path.join(root, 'captures'), { recursive: true });
   try {
     return fn(slug);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('svc-a'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -67,7 +70,7 @@ test('P1-C1: capture-merge clears TRACE_EMPTY + no_property_access after success
     assert.ok(result.merged >= 1);
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     const gaps = contract.coverage.gaps || [];
     assert.ok(!gaps.includes('TRACE_EMPTY'), `TRACE_EMPTY should be cleared: ${gaps}`);
@@ -99,7 +102,7 @@ test('P1-C2: capture-merge clears no_callsite when real data arrives (export now
     captureMerge(slug, { capturesDir });
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     const gaps = contract.coverage.gaps || [];
     assert.ok(!gaps.includes('no_callsite'), `no_callsite should be cleared by capture: ${gaps}`);
@@ -138,7 +141,7 @@ test('P1-C3: capture-merge preserves bind_ambiguous and dynamic_key (capture doe
     captureMerge(slug, { capturesDir });
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     const gaps = contract.coverage.gaps || [];
     assert.ok(!gaps.includes('TRACE_EMPTY'), 'TRACE_EMPTY cleared');
@@ -170,7 +173,7 @@ test('P1-C4: capture-merge stamps fidelity=L2 after successful merge', () => {
     captureMerge(slug, { capturesDir });
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     assert.equal(contract.fidelity, 'L2', `fidelity should be L2 after capture, got ${contract.fidelity}`);
   });
@@ -199,7 +202,7 @@ test('P1-C5: capture-merge sanitizes token/password fields in persisted data', (
     captureMerge(slug, { capturesDir });
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     const data = contract.cases.find((c) => c.id === 'success').response.data;
     assert.equal(data.token, '[REDACTED]', 'token redacted');
@@ -232,7 +235,7 @@ test('P1-C6: capture-merge --no-sanitize opts disables sanitization', () => {
     captureMerge(slug, { capturesDir, sanitize: false });
 
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET svc-a/v1/items'), 'utf8'),
+      fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
     );
     const data = contract.cases.find((c) => c.id === 'success').response.data;
     assert.equal(data.token, 'leaked', 'token preserved when sanitize disabled');

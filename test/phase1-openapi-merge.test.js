@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { importOpenApi, schemaToShape } = require('../scripts/import-openapi');
-const { projectDataDir, contractPath } = require('../lib/paths');
+const { projectDataDir, serviceDataDir, serviceContractPath } = require('../lib/paths');
 
 function mktmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'oa-'));
@@ -47,6 +47,11 @@ test('P1.5-A1: import-openapi derives stubId + upstreamId from host (no FQDN api
     assert.ok(!role.apiKey || !role.apiKey.includes('api.example.com'), 'apiKey should not be FQDN-based');
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -95,7 +100,7 @@ test('P1.5-A2: import-openapi merges OpenAPI shape into existing usage stub by s
 
     // The contract at GET api/v1/pets should now have the UNION of fields (OpenAPI enriched usage)
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET api/v1/pets'), 'utf8'),
+      fs.readFileSync(serviceContractPath('api', 'GET api/v1/pets'), 'utf8'),
     );
     const props = contract.response.shape?.props || {};
     assert.ok(props.name, 'usage field name preserved');
@@ -108,6 +113,11 @@ test('P1.5-A2: import-openapi merges OpenAPI shape into existing usage stub by s
     );
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -143,6 +153,11 @@ paths:
     assert.equal(r.roles[0].stubId, 'GET api/v1/pets');
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -167,12 +182,17 @@ test('P1.5-A4: import-openapi stamps fidelity on generated contracts', () => {
     });
     importOpenApi({ projectDir: tmp, name: slug, from: specPath, force: true });
     const contract = JSON.parse(
-      fs.readFileSync(contractPath(slug, 'GET api/v1/pets'), 'utf8'),
+      fs.readFileSync(serviceContractPath('api', 'GET api/v1/pets'), 'utf8'),
     );
     assert.equal(contract.fidelity, 'L1', 'openapi shape → L1 (placeholder, not captured)');
     assert.equal(contract.source, 'openapi');
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -194,6 +214,11 @@ test('P1.5-A5: import-openapi with env-suffixed host normalizes upstreamId', () 
     assert.ok(r.roles[0].hosts.includes('api-stage.example.com'));
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

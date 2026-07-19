@@ -4,20 +4,29 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { projectDataDir, stubHandlerPath, contractPath } = require('../lib/paths');
+const {
+  projectDataDir,
+  serviceDataDir,
+  serviceContractPath,
+} = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
 
 function withTempProject(fn) {
   const slug = `cap-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   fs.mkdirSync(path.join(root, 'captures'), { recursive: true });
   try {
     return fn(slug);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+    for (const up of ['svc-a', 'svc-b']) {
+      try {
+        fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
@@ -64,8 +73,8 @@ test('C1: capture-merge with known host writes to stub path, source=usage+captur
     const result = captureMerge(slug, { capturesDir });
     assert.ok(result.merged >= 1, `expected merged>=1, got ${JSON.stringify(result)}`);
 
-    // Contract should have source=usage+capture
-    const cPath = contractPath(slug, 'GET svc-a/v1/items');
+    // Contract should have source=usage+capture under services/
+    const cPath = serviceContractPath('svc-a', 'GET svc-a/v1/items');
     const contract = JSON.parse(fs.readFileSync(cPath, 'utf8'));
     assert.ok(
       String(contract.response?.source || '').includes('capture'),
@@ -96,9 +105,9 @@ test('C2: capture-merge with unknown host + unique path learns host into upstrea
     const result = captureMerge(slug, { capturesDir });
     assert.ok(result.merged >= 1, 'alias host should be learned');
 
-    // upstreams.json should now include the alias
+    // upstreams.json under service should now include the alias
     const upstreams = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'upstreams.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('svc-a'), 'upstreams.json'), 'utf8'),
     );
     assert.ok(
       upstreams.upstreams['svc-a'].hosts.includes('svc-a-internal.example.com'),

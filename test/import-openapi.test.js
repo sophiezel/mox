@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { importOpenApi, schemaToShape } = require('../scripts/import-openapi');
-const { projectDataDir } = require('../lib/paths');
+const { projectDataDir, serviceDataDir } = require('../lib/paths');
 
 test('schemaToShape: object props', () => {
   const shape = schemaToShape({
@@ -67,11 +67,16 @@ test('importOpenApi: generates contracts from spec', () => {
     assert.ok(r.roles.length >= 1);
     assert.ok(r.gen.generated >= 1);
     const contracts = fs.readdirSync(
-      path.join(projectDataDir(slug), 'contracts'),
+      path.join(serviceDataDir('api'), 'contracts'),
     );
     assert.ok(contracts.some((f) => f.includes('pets')));
   } finally {
     fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    try {
+      fs.rmSync(serviceDataDir('api'), { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

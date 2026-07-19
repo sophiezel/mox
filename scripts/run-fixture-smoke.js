@@ -91,13 +91,10 @@ async function run() {
     throw new Error('no mocks generated for fixture');
   }
 
-  const rulesPath = path.join(projectDataDir(SLUG), 'proxy-rules.json');
-  const rules = fs.existsSync(rulesPath)
-    ? JSON.parse(fs.readFileSync(rulesPath, 'utf8'))
-    : [];
+  const rules = mergeCatalogs([SLUG]).rules;
   if (rules.length === 0) {
     throw new Error(
-      'proxy-rules.json empty after init — fixture pages must consume APIs so handlers materialize',
+      'no proxy-rules after init — fixture pages must consume APIs so handlers materialize',
     );
   }
 

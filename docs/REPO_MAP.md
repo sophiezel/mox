@@ -181,5 +181,8 @@ All eight fixtures have consumers — none are delete candidates.
 
 - Rename `phase*.test.js` → topic names (churn).
 - Fold overlapping OpenAPI / prune tests.
-- Remove legacy write to `projects/*/mocks` in capture-merge (behavior change).
 - Top-level directory reorg (`scripts/` → `commands/`, etc.).
+
+## Done (slim projects)
+
+- Stop dual-write of contracts / aggregate proxy-rules / upstreams under `projects/*/`; capture-merge writes service catalog truth.

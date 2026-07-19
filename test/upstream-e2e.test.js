@@ -21,7 +21,7 @@ const os = require('os');
 
 const { inferApiUsage } = require('../scripts/infer-api-usage');
 const { generateMocks } = require('../scripts/generate-mock');
-const { projectDataDir, stubHandlerPath, contractPath } = require('../lib/paths');
+const { projectDataDir, stubHandlerPath, serviceDataDir } = require('../lib/paths');
 const { matchRule } = require('../lib/match-rule');
 const { resolveStubHandlerFile } = require('../runtime/mock-server/router');
 const { stubId: makeStubId, parseStubId } = require('../lib/paths');
@@ -31,13 +31,18 @@ const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'multi-host-web');
 function withTempProject(fn) {
   const slug = `e2e-upstream-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   try {
     return fn(slug);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+    for (const up of ['svcAPrefix', 'svcBPrefix']) {
+      try {
+        fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
@@ -84,35 +89,43 @@ test('E2E: multi-host fixture — full stub catalog pipeline', () => {
     const gen = generateMocks({ projectSlug: slug, roles, force: true, merge: false });
     assert.ok(gen.generated >= 3, `expected >=3 generated, got ${gen.generated}`);
 
-    // Step 3: Verify proxy-rules.json
+    // Step 3: Verify proxy-rules.json under services
     const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('svcAPrefix'), 'proxy-rules.json'), 'utf8'),
     );
-    assert.ok(rules.length >= 3, `expected >=3 rules, got ${rules.length}`);
+    const allRules = [
+      ...rules,
+      ...(fs.existsSync(path.join(serviceDataDir('svcBPrefix'), 'proxy-rules.json'))
+        ? JSON.parse(fs.readFileSync(path.join(serviceDataDir('svcBPrefix'), 'proxy-rules.json'), 'utf8'))
+        : []),
+    ];
+    assert.ok(allRules.length >= 3, `expected >=3 rules, got ${allRules.length}`);
 
-    const svcARule = rules.find((r) => r.stubId?.includes('svcAPrefix') && r.pathPrefix === '/v1/items' && r.methods?.includes('GET'));
+    const svcARule = allRules.find((r) => r.stubId?.includes('svcAPrefix') && r.pathPrefix === '/v1/items' && r.methods?.includes('GET'));
     assert.ok(svcARule, `should find svcAPrefix GET /v1/items rule`);
     assert.ok(svcARule.hosts?.length >= 2, `svcA rule should have >=2 hosts, got ${JSON.stringify(svcARule.hosts)}`);
     assert.ok(svcARule.upstreamId === 'svcAPrefix', `svcA rule upstreamId should be svcAPrefix`);
 
-    // Step 4: Verify upstreams.json
+    // Step 4: Verify upstreams.json under services
     const upstreams = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'upstreams.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('svcAPrefix'), 'upstreams.json'), 'utf8'),
     );
     assert.ok(upstreams.upstreams['svcAPrefix'], 'svcAPrefix upstream should exist');
     assert.ok(upstreams.upstreams['svcAPrefix'].hosts.length >= 2, 'svcAPrefix should have >=2 hosts');
-    assert.ok(upstreams.upstreams['svcBPrefix'], 'svcBPrefix upstream should exist');
+    const upstreamsB = JSON.parse(
+      fs.readFileSync(path.join(serviceDataDir('svcBPrefix'), 'upstreams.json'), 'utf8'),
+    );
+    assert.ok(upstreamsB.upstreams['svcBPrefix'], 'svcBPrefix upstream should exist');
 
     // Step 5: matchRule — both env hosts match the same rule
-    const prodMatch = matchRule(rules, 'svc-a.example.com', '/v1/items', 'GET');
+    const prodMatch = matchRule(allRules, 'svc-a.example.com', '/v1/items', 'GET');
     assert.ok(prodMatch, 'prod host should match');
-    const stageMatch = matchRule(rules, 'svc-a-stage.example.com', '/v1/items', 'GET');
+    const stageMatch = matchRule(allRules, 'svc-a-stage.example.com', '/v1/items', 'GET');
     assert.ok(stageMatch, 'stage host should match');
     assert.equal(prodMatch.stubId, stageMatch.stubId, 'both env hosts should match the same stub');
 
     // Step 6: router resolveStubHandlerFile — service mocks root
     const { mocksRootForStub } = require('../lib/catalog-merge');
-    const { serviceDataDir } = require('../lib/paths');
     const svcRoot = mocksRootForStub(prodMatch.stubId);
     const handlerFile = resolveStubHandlerFile(svcRoot, {
       stubId: prodMatch.stubId,

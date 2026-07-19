@@ -129,11 +129,8 @@ async function main() {
     summary.fault = parseSmokeSummary(faultOut.stdout || '');
     if (summary.fault.failed) summary.ok = false;
 
-    const rulesPath = path.join(
-      require('../lib/paths').projectDataDir(SLUG),
-      'proxy-rules.json',
-    );
-    const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+    const { mergeCatalogs } = require('../lib/catalog-merge');
+    const rules = mergeCatalogs([SLUG]).rules;
     const rule =
       rules.find((x) => (x.methods || []).map(String).includes('GET')) ||
       rules[0];

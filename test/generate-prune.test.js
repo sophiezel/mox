@@ -10,17 +10,15 @@ const {
 } = require('../scripts/generate-mock');
 const {
   projectDataDir,
+  serviceDataDir,
   stubHandlerPath,
-  contractPath,
+  serviceContractPath,
   stubId,
 } = require('../lib/paths');
 
 function withTempProject(fn) {
   const slug = `prune-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  const { serviceDataDir } = require('../lib/paths');
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   try {
     return fn(slug);
@@ -62,14 +60,16 @@ function makeRole(overrides = {}) {
 
 test('generate force: prunes orphan handlers and contracts', () => {
   withTempProject((slug) => {
-    // Create an orphan handler under the new layout
-    const orphanUp = 'orphan-svc';
+    // Orphan under the same upstream this generate will touch (so prune walks that service)
+    const orphanUp = 'prune-svc';
     const orphanHandler = stubHandlerPath(slug, orphanUp, 'GET', '/v1/orphan');
     fs.mkdirSync(path.dirname(orphanHandler), { recursive: true });
     fs.writeFileSync(orphanHandler, 'module.exports = () => ({});\n');
     const orphanKey = stubId({ upstreamId: orphanUp, method: 'GET', path: '/v1/orphan' });
+    const orphanContract = serviceContractPath(orphanUp, orphanKey);
+    fs.mkdirSync(path.dirname(orphanContract), { recursive: true });
     fs.writeFileSync(
-      contractPath(slug, orphanKey),
+      orphanContract,
       JSON.stringify({ id: orphanKey, stubId: orphanKey, upstreamId: orphanUp, path: '/v1/orphan', method: ['GET'] }, null, 2),
     );
 
@@ -78,7 +78,7 @@ test('generate force: prunes orphan handlers and contracts', () => {
     assert.ok(gen.prunedHandlers >= 1, `expected prunedHandlers>=1 got ${gen.prunedHandlers}`);
     assert.ok(gen.prunedContracts >= 1, `expected prunedContracts>=1 got ${gen.prunedContracts}`);
     assert.ok(!fs.existsSync(orphanHandler), 'orphan handler should be removed');
-    assert.ok(!fs.existsSync(contractPath(slug, orphanKey)), 'orphan contract should be removed');
+    assert.ok(!fs.existsSync(orphanContract), 'orphan contract should be removed');
 
     const keepHandler = stubHandlerPath(slug, 'prune-svc', 'GET', '/v1/items/detail');
     assert.ok(fs.existsSync(keepHandler), 'whitelist handler should remain');
@@ -105,7 +105,7 @@ test('generate: empty + exportHint still materializes handler (no_property_acces
     assert.equal(gen.skippedEmptyCount, 0);
     assert.equal(gen.generated, 1);
     const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('prune-svc'), 'proxy-rules.json'), 'utf8'),
     );
     assert.equal(rules.length, 1, 'exportHint empty shape still enters proxy-rules');
     assert.ok(
@@ -133,12 +133,13 @@ test('generate: empty + no_export_symbol is contract-only (no proxy rule)', () =
     ];
     const gen = generateMocks({ projectSlug: slug, roles, force: true, merge: false });
     assert.equal(gen.skippedEmptyCount, 1);
-    const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
-    );
-    assert.equal(rules.length, 0, 'empty+no_export_symbol must not enter proxy-rules');
+    const rulesPath = path.join(serviceDataDir('prune-svc'), 'proxy-rules.json');
+    if (fs.existsSync(rulesPath)) {
+      const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      assert.equal(rules.length, 0, 'empty+no_export_symbol must not enter proxy-rules');
+    }
     const key = 'GET prune-svc/v1/addr/orphan';
-    assert.ok(fs.existsSync(contractPath(slug, key)), 'contract should still be written');
+    assert.ok(fs.existsSync(serviceContractPath('prune-svc', key)), 'contract should still be written');
     assert.ok(
       !fs.existsSync(stubHandlerPath(slug, 'prune-svc', 'GET', '/v1/addr/orphan')),
       'handler should not be rendered',

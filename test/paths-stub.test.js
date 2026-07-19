@@ -91,6 +91,28 @@ test('ensureProjectDirs does not create chrome-profiles (no garbage)', () => {
   }
 });
 
+test('ensureProjectDirs is thin: no contracts/mocks shells', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const { ensureProjectDirs, projectDataDir } = require('../lib/paths');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-thin-'));
+  const prev = process.env.MOX_DATA_ROOT;
+  process.env.MOX_DATA_ROOT = tmp;
+  try {
+    const slug = 'thin-proj';
+    ensureProjectDirs(slug);
+    const base = projectDataDir(slug);
+    for (const sub of ['classify', 'captures', 'reports', 'audit', 'scenarios', 'exports']) {
+      assert.ok(fs.existsSync(path.join(base, sub)), `expected ${sub}`);
+    }
+    assert.ok(!fs.existsSync(path.join(base, 'contracts')));
+    assert.ok(!fs.existsSync(path.join(base, 'mocks')));
+  } finally {
+    process.env.MOX_DATA_ROOT = prev;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('U6: stubId rejects FQDN as upstreamId (guard)', () => {
   // upstreamId must not be a FQDN; stubId should still format but downstream
   // collapse must never pass a FQDN. Here we only assert the formatter does not

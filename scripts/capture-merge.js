@@ -7,18 +7,22 @@ const fs = require('fs');
 const path = require('path');
 const {
   ensureProjectDirs,
+  ensureServiceDirs,
   projectDataDir,
-  contractPath,
+  serviceDataDir,
+  serviceContractPath,
   stubHandlerPath,
   stubId: makeStubId,
   apiKey,
+  listServiceIds,
+  sanitizeUpstreamId,
 } = require('../lib/paths');
 const { appendAudit } = require('../lib/audit');
 const { renderHandler, loadExistingContracts } = require('./generate-mock');
 const { isPlaceholderValue } = require('../lib/materialize');
-const { normalizeHostLabel } = require('../lib/upstream');
 const { classifyFidelity } = require('../lib/gap-taxonomy');
 const { sanitizeCapture } = require('../lib/sanitize-capture');
+const { readProjectIndex } = require('../lib/catalog-merge');
 
 function deepMergeShape(target, sample) {
   if (sample == null) return target;
@@ -89,19 +93,57 @@ function mergeDataAdditive(existing, incoming) {
   return out;
 }
 
+/** Aggregate upstreams from service catalog (truth); legacy project file is fallback. */
 function loadUpstreams(projectSlug) {
-  const p = path.join(projectDataDir(projectSlug), 'upstreams.json');
-  if (!fs.existsSync(p)) return { version: 1, upstreams: {} };
-  try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch {
-    return { version: 1, upstreams: {} };
+  const merged = { version: 1, upstreams: {} };
+  const idx = readProjectIndex(projectSlug);
+  const ids =
+    idx?.upstreams?.length > 0
+      ? idx.upstreams.map((u) => sanitizeUpstreamId(u))
+      : listServiceIds();
+
+  for (const up of ids) {
+    const p = path.join(serviceDataDir(up), 'upstreams.json');
+    if (!fs.existsSync(p)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      Object.assign(merged.upstreams, data.upstreams || {});
+    } catch {
+      /* ignore */
+    }
   }
+
+  if (!Object.keys(merged.upstreams).length) {
+    const legacy = path.join(projectDataDir(projectSlug), 'upstreams.json');
+    if (fs.existsSync(legacy)) {
+      try {
+        return JSON.parse(fs.readFileSync(legacy, 'utf8'));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return merged;
 }
 
-function saveUpstreams(projectSlug, data) {
-  const p = path.join(projectDataDir(projectSlug), 'upstreams.json');
-  fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`);
+/** Persist host aliases into services/<upstreamId>/upstreams.json (catalog truth). */
+function saveUpstreams(_projectSlug, data) {
+  for (const [upId, info] of Object.entries(data.upstreams || {})) {
+    const up = sanitizeUpstreamId(upId);
+    ensureServiceDirs(up);
+    const p = path.join(serviceDataDir(up), 'upstreams.json');
+    let existing = { version: 1, upstreams: {} };
+    if (fs.existsSync(p)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(p, 'utf8'));
+      } catch {
+        /* ignore */
+      }
+    }
+    existing.upstreams = existing.upstreams || {};
+    existing.upstreams[up] = info;
+    fs.writeFileSync(p, `${JSON.stringify(existing, null, 2)}\n`);
+  }
 }
 
 function hostToUpstream(host, upstreams) {
@@ -272,22 +314,32 @@ function captureMerge(projectSlug, opts = {}) {
       ],
     };
 
-    const cPath = contractPath(projectSlug, contract.id || id);
+    const up = sanitizeUpstreamId(contract.upstreamId || upstreamId || '_default');
+    ensureServiceDirs(up);
+    const cPath = serviceContractPath(up, contract.stubId || contract.id || id);
+    fs.mkdirSync(path.dirname(cPath), { recursive: true });
     fs.writeFileSync(cPath, `${JSON.stringify(contract, null, 2)}\n`);
 
     const handlerFile = stubHandlerPath(
       projectSlug,
-      contract.upstreamId || upstreamId || '_default',
+      up,
       method,
       contract.path,
     );
-    // Also update legacy FQDN handler if present
+    if (
+      fs.existsSync(handlerFile) &&
+      !fs.readFileSync(handlerFile, 'utf8').includes('mox:manual')
+    ) {
+      fs.writeFileSync(handlerFile, renderHandler(contract));
+    }
+    // Legacy FQDN handler under projects/: update only if already present
     const { mockHandlerPath } = require('../lib/paths');
     const legacyHandler = mockHandlerPath(projectSlug, host, contract.path);
-    for (const file of [handlerFile, legacyHandler]) {
-      if (fs.existsSync(file) && !fs.readFileSync(file, 'utf8').includes('mox:manual')) {
-        fs.writeFileSync(file, renderHandler(contract));
-      }
+    if (
+      fs.existsSync(legacyHandler) &&
+      !fs.readFileSync(legacyHandler, 'utf8').includes('mox:manual')
+    ) {
+      fs.writeFileSync(legacyHandler, renderHandler(contract));
     }
 
     appendAudit(projectSlug, {

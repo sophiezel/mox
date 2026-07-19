@@ -4,14 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { projectDataDir, serviceDataDir, stubHandlerPath, contractPath } = require('../lib/paths');
+const { projectDataDir, serviceDataDir, stubHandlerPath, serviceContractPath } = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
 
 function withTempProject(fn) {
   const slug = `dead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'mocks'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'contracts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
   try {
     return fn(slug);
@@ -63,17 +61,17 @@ test('P3-D1: empty + no_callsite → contract-only (no handler, no proxy rule)',
     assert.ok(gen.skippedEmptyCount >= 1, 'no_callsite+empty should be skippedEmpty');
 
     // Contract written
-    assert.ok(fs.existsSync(contractPath(slug, 'GET dead-svc/v1/items')), 'contract written');
+    assert.ok(fs.existsSync(serviceContractPath('dead-svc', 'GET dead-svc/v1/items')), 'contract written');
 
     // No handler file
     const handlerFile = stubHandlerPath(slug, 'dead-svc', 'GET', '/v1/items');
     assert.ok(!fs.existsSync(handlerFile), 'no handler for dead export');
 
-    // No proxy rule (proxy-rules.json is a bare JSON array)
-    const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
-    );
-    const arr = Array.isArray(rules) ? rules : (rules.rules || []);
+    // No proxy rule under service catalog
+    const rulesPath = path.join(serviceDataDir('dead-svc'), 'proxy-rules.json');
+    const arr = fs.existsSync(rulesPath)
+      ? JSON.parse(fs.readFileSync(rulesPath, 'utf8'))
+      : [];
     assert.ok(!arr.some((r) => r.stubId === 'GET dead-svc/v1/items'), 'no proxy rule for dead export');
   });
 });
@@ -90,7 +88,7 @@ test('P3-D2: empty + no_export_symbol → contract-only (existing behavior prese
       projectSlug: slug, roles: [role], force: true, merge: false,
     });
     assert.ok(gen.skippedEmptyCount >= 1);
-    assert.ok(fs.existsSync(contractPath(slug, 'GET dead-svc/v1/items')));
+    assert.ok(fs.existsSync(serviceContractPath('dead-svc', 'GET dead-svc/v1/items')));
     const handlerFile = stubHandlerPath(slug, 'dead-svc', 'GET', '/v1/items');
     assert.ok(!fs.existsSync(handlerFile));
   });
@@ -114,7 +112,7 @@ test('P3-D3: empty + TRACE_EMPTY (callsite exists) → still renders handler (no
     const handlerFile = stubHandlerPath(slug, 'dead-svc', 'GET', '/v1/items');
     assert.ok(fs.existsSync(handlerFile), 'handler kept for TRACE_EMPTY');
     const rules = JSON.parse(
-      fs.readFileSync(path.join(projectDataDir(slug), 'proxy-rules.json'), 'utf8'),
+      fs.readFileSync(path.join(serviceDataDir('dead-svc'), 'proxy-rules.json'), 'utf8'),
     );
     const arr = Array.isArray(rules) ? rules : (rules.rules || []);
     assert.ok(arr.some((r) => r.stubId === 'GET dead-svc/v1/items'), 'proxy rule kept');
