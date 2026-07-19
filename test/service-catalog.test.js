@@ -16,17 +16,17 @@ const {
   serviceContractPath,
   listServiceIds,
   sanitizeUpstreamId,
+  ensureDataDirs,
+  getDataRoot,
 } = require('../lib/paths');
 const {
-  writeProjectIndex,
-  readProjectIndex,
   upsertServiceRules,
   resolveActiveCatalogs,
   mergeCatalogs,
   mocksRootForStub,
 } = require('../lib/catalog-merge');
 
-const UP = 'prefix-cars-task';
+const UP = 'cars-task';
 
 before(() => {
   fs.mkdirSync(tmpRoot, { recursive: true });
@@ -47,41 +47,35 @@ test('service dirs and stub handler path under services/<upstreamId>', () => {
     handler,
     path.join(base, 'mocks', 'GET', 'cars-task', 'list', 'index.js'),
   );
-  const cPath = serviceContractPath(UP, 'GET prefix-cars-task/cars-task/list');
+  const cPath = serviceContractPath(UP, 'GET cars-task/cars-task/list');
   assert.ok(cPath.includes(path.join('services', UP, 'contracts')));
 });
 
-test('two projects share one service catalog via index', () => {
+test('two init scans write same service catalog (no projects/)', () => {
+  ensureDataDirs();
   ensureServiceDirs(UP);
   const rules = [
     {
-      stubId: 'GET prefix-cars-task/cars-task/list',
+      stubId: 'GET cars-task/cars-task/list',
       upstreamId: UP,
       pathPrefix: '/cars-task/list',
       methods: ['GET'],
       hosts: ['a.example.com'],
     },
   ];
+  // Simulate two frontend scans materializing the same upstream
   upsertServiceRules(UP, rules);
-  writeProjectIndex('front-a', {
-    stubs: ['GET prefix-cars-task/cars-task/list'],
-    upstreams: [UP],
-  });
-  writeProjectIndex('front-b', {
-    stubs: ['GET prefix-cars-task/cars-task/list'],
-    upstreams: [UP],
-  });
+  upsertServiceRules(UP, rules);
 
-  const idxA = readProjectIndex('front-a');
-  assert.deepEqual(idxA.upstreams, [UP]);
   assert.equal(listServiceIds().includes(UP), true);
+  assert.ok(!fs.existsSync(path.join(getDataRoot(), 'projects')));
 
-  const merged = mergeCatalogs(['front-a', 'front-b']);
+  const merged = mergeCatalogs([UP]);
   assert.equal(merged.rules.length, 1);
-  assert.equal(merged.rules[0].stubId, 'GET prefix-cars-task/cars-task/list');
-  assert.equal(merged.stubToCatalog['GET prefix-cars-task/cars-task/list'], UP);
+  assert.equal(merged.rules[0].stubId, 'GET cars-task/cars-task/list');
+  assert.equal(merged.stubToCatalog['GET cars-task/cars-task/list'], UP);
 
-  const root = mocksRootForStub('GET prefix-cars-task/cars-task/list');
+  const root = mocksRootForStub('GET cars-task/cars-task/list');
   assert.equal(root, path.join(serviceDataDir(UP), 'mocks'));
 });
 

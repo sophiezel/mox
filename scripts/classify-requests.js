@@ -3,8 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  ensureProjectDirs,
-  projectDataDir,
+  ensureDataDirs,
+  classifyDir,
+  reportsDir,
   apiKey,
   stubId: makeStubId,
   sanitizeSlug,
@@ -72,11 +73,8 @@ function classifyRequests(opts) {
       modifiedFiles.some((f) => e && e.includes(f)),
     );
 
-    const relatedToTask = Boolean(taskId && (pathHit || evidenceHit || keywords.length === 0 && false));
-    // Without task: treat as project baseline → dependency (generate/reuse)
     let related = Boolean(taskId) && (pathHit || evidenceHit);
 
-    // If task + relatedFrom file mentions path explicitly
     if (taskId && docText && docText.includes(api.path)) related = true;
 
     let role = 'unrelated';
@@ -87,7 +85,6 @@ function classifyRequests(opts) {
     } else if (!hasMock && !existing) {
       role = 'new';
     } else if (pathHit || evidenceHit) {
-      // present in project + related → modify if docs/diff imply change, else dependency
       const looksModified =
         (docText && (docText.includes('修改') || docText.includes('变更') || docText.includes('modify'))) ||
         evidenceHit;
@@ -96,7 +93,6 @@ function classifyRequests(opts) {
       role = 'dependency';
     }
 
-    // Conflict: modify with existing contract field mismatch hints
     if (role === 'modify' && existing && api.responseHints?.length) {
       const oldFields = Object.keys(existing.response?.dataFields || {});
       const missing = api.responseHints.filter((f) => oldFields.length && !oldFields.includes(f));
@@ -143,10 +139,10 @@ function classifyRequests(opts) {
   return { roles, conflicts, taskId };
 }
 
-function writeClassifyResult(projectSlug, result) {
-  ensureProjectDirs(projectSlug);
-  const base = projectDataDir(projectSlug);
-  const file = path.join(base, 'classify', 'request-roles.json');
+/** Write classify result to global .data/classify/ (ignores slug arg for compat). */
+function writeClassifyResult(_ignoredSlug, result) {
+  ensureDataDirs();
+  const file = path.join(classifyDir(), 'request-roles.json');
   fs.writeFileSync(file, `${JSON.stringify(result, null, 2)}\n`);
   if (result.conflicts?.length) {
     const md = [
@@ -162,7 +158,7 @@ function writeClassifyResult(projectSlug, result) {
       '请确认保留哪一侧后再 generate（未决议不会覆盖已有 handler）。',
       '',
     ].join('\n');
-    fs.writeFileSync(path.join(base, 'reports', 'contract-conflicts.md'), md);
+    fs.writeFileSync(path.join(reportsDir(), 'contract-conflicts.md'), md);
   }
   return file;
 }

@@ -64,49 +64,48 @@ test('U6: parseStubId handles upstream id with dashes', () => {
   assert.equal(parsed.path, '/v2/foo/bar');
 });
 
-test('ensureProjectDirs does not create chrome-profiles (no garbage)', () => {
+test('ensureDataDirs creates global ops dirs (no projects/)', () => {
   const fs = require('fs');
   const os = require('os');
   const {
-    ensureProjectDirs,
+    ensureDataDirs,
     chromeProfileDir,
     ensureChromeProfileDir,
-    projectDataDir,
     getDataRoot,
   } = require('../lib/paths');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-chrome-'));
   const prev = process.env.MOX_DATA_ROOT;
   process.env.MOX_DATA_ROOT = tmp;
   try {
-    const slug = 'no-chrome-leak';
-    ensureProjectDirs(slug);
-    assert.ok(fs.existsSync(projectDataDir(slug)));
-    assert.ok(!fs.existsSync(chromeProfileDir(slug)));
-    assert.ok(!fs.existsSync(path.join(getDataRoot(), 'chrome-profiles')));
-    ensureChromeProfileDir(slug);
-    assert.ok(fs.existsSync(chromeProfileDir(slug)));
+    ensureDataDirs();
+    const root = getDataRoot();
+    for (const sub of ['classify', 'reports', 'audit', 'scenarios', 'exports']) {
+      assert.ok(fs.existsSync(path.join(root, sub)), `expected ${sub}`);
+    }
+    assert.ok(!fs.existsSync(path.join(root, 'projects')));
+    assert.ok(!fs.existsSync(chromeProfileDir('scan-label')));
+    assert.ok(!fs.existsSync(path.join(root, 'chrome-profiles')));
+    ensureChromeProfileDir('scan-label');
+    assert.ok(fs.existsSync(chromeProfileDir('scan-label')));
   } finally {
     process.env.MOX_DATA_ROOT = prev;
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-test('ensureProjectDirs is thin: no contracts/mocks shells', () => {
+test('ensureDataDirs is idempotent and does not create catalog shells', () => {
   const fs = require('fs');
   const os = require('os');
-  const { ensureProjectDirs, projectDataDir } = require('../lib/paths');
+  const { ensureDataDirs, getDataRoot } = require('../lib/paths');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mock-thin-'));
   const prev = process.env.MOX_DATA_ROOT;
   process.env.MOX_DATA_ROOT = tmp;
   try {
-    const slug = 'thin-proj';
-    ensureProjectDirs(slug);
-    const base = projectDataDir(slug);
-    for (const sub of ['classify', 'captures', 'reports', 'audit', 'scenarios', 'exports']) {
-      assert.ok(fs.existsSync(path.join(base, sub)), `expected ${sub}`);
-    }
-    assert.ok(!fs.existsSync(path.join(base, 'contracts')));
-    assert.ok(!fs.existsSync(path.join(base, 'mocks')));
+    ensureDataDirs();
+    ensureDataDirs();
+    const root = getDataRoot();
+    assert.ok(!fs.existsSync(path.join(root, 'projects')));
+    assert.ok(!fs.existsSync(path.join(root, 'services')));
   } finally {
     process.env.MOX_DATA_ROOT = prev;
     fs.rmSync(tmp, { recursive: true, force: true });

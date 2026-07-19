@@ -5,21 +5,17 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const {
-  projectDataDir,
   serviceDataDir,
   serviceContractPath,
 } = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
+const { capturesDirFor } = require('../lib/catalog-merge');
 
-function withTempProject(fn) {
-  const slug = `cap-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'captures'), { recursive: true });
+function withTempServices(fn) {
+  const label = `cap-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
-    return fn(slug);
+    return fn(label);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
     for (const up of ['svc-a', 'svc-b']) {
       try {
         fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
@@ -52,12 +48,11 @@ function makeRole() {
 }
 
 test('C1: capture-merge with known host writes to stub path, source=usage+capture', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [makeRole()];
     generateMocks({ projectSlug: slug, roles, force: true, merge: false });
 
-    // Simulate a capture record from a known host
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     const captureFile = path.join(capturesDir, 'test-capture.json');
     fs.writeFileSync(
       captureFile,
@@ -70,7 +65,7 @@ test('C1: capture-merge with known host writes to stub path, source=usage+captur
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    const result = captureMerge(slug, { capturesDir });
+    const result = captureMerge({ capturesDir });
     assert.ok(result.merged >= 1, `expected merged>=1, got ${JSON.stringify(result)}`);
 
     // Contract should have source=usage+capture under services/
@@ -84,12 +79,12 @@ test('C1: capture-merge with known host writes to stub path, source=usage+captur
 });
 
 test('C2: capture-merge with unknown host + unique path learns host into upstreams.json', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [makeRole()];
     generateMocks({ projectSlug: slug, roles, force: true, merge: false });
 
     // Simulate a capture from an unknown host alias
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     const captureFile = path.join(capturesDir, 'test-alias.json');
     fs.writeFileSync(
       captureFile,
@@ -102,7 +97,7 @@ test('C2: capture-merge with unknown host + unique path learns host into upstrea
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    const result = captureMerge(slug, { capturesDir });
+    const result = captureMerge({ capturesDir });
     assert.ok(result.merged >= 1, 'alias host should be learned');
 
     // upstreams.json under service should now include the alias
@@ -117,7 +112,7 @@ test('C2: capture-merge with unknown host + unique path learns host into upstrea
 });
 
 test('C3: capture-merge with ambiguous path (multiple upstreams) → skip + report', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     // Two upstreams, same path
     const roles = [
       makeRole(),
@@ -133,7 +128,7 @@ test('C3: capture-merge with ambiguous path (multiple upstreams) → skip + repo
     generateMocks({ projectSlug: slug, roles, force: true, merge: false });
 
     // Capture from a host not in any upstream
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     const captureFile = path.join(capturesDir, 'test-ambig.json');
     fs.writeFileSync(
       captureFile,
@@ -146,7 +141,7 @@ test('C3: capture-merge with ambiguous path (multiple upstreams) → skip + repo
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    const result = captureMerge(slug, { capturesDir });
+    const result = captureMerge({ capturesDir });
     // Should skip because path is ambiguous (matches both svc-a and svc-b)
     assert.ok(result.skipped.length >= 1, `expected skipped.length>=1, got ${JSON.stringify(result)}`);
   });

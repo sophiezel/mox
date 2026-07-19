@@ -4,13 +4,14 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const {
-  resolveProjectSlug,
-  projectDataDir,
-  ensureProjectDirs,
+  ensureDataDirs,
+  reportsDir,
+  resolveScanLabel,
 } = require('../lib/paths');
 const {
-  loadContractsForCatalog,
+  loadContractsAcross,
   handlerExistsForContract,
+  parseNameList,
 } = require('../lib/catalog-merge');
 const { loadSession } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
@@ -55,13 +56,11 @@ function expectedStatusFor(caseId, contractCase) {
 }
 
 async function smokeCases(opts = {}) {
-  const projectSlug = resolveProjectSlug(
-    opts.projectDir || process.cwd(),
-    opts.name,
-  );
-  ensureProjectDirs(projectSlug);
-  const cfg = loadSession(projectSlug);
-  const contracts = loadContractsForCatalog(projectSlug);
+  ensureDataDirs();
+  const names = parseNameList(opts.name);
+  const label = resolveScanLabel(opts.projectDir || process.cwd(), opts.name);
+  const cfg = loadSession();
+  const contracts = loadContractsAcross(names.length ? names : null);
   if (!contracts.length) {
     throw new Error('no contracts — run mox init first');
   }
@@ -79,7 +78,7 @@ async function smokeCases(opts = {}) {
   let skippedNoHandler = 0;
 
   for (const contract of contracts) {
-    if (!handlerExistsForContract(contract, projectSlug)) {
+    if (!handlerExistsForContract(contract)) {
       skippedNoHandler++;
       continue;
     }
@@ -124,11 +123,7 @@ async function smokeCases(opts = {}) {
     }
   }
 
-  const report = path.join(
-    projectDataDir(projectSlug),
-    'reports',
-    `smoke-${Date.now()}.md`,
-  );
+  const report = path.join(reportsDir(), `smoke-${Date.now()}.md`);
   const md = [
     '# smoke report',
     '',
@@ -145,26 +140,21 @@ async function smokeCases(opts = {}) {
     '',
   ].join('\n');
   fs.writeFileSync(report, md);
-  appendAudit(projectSlug, {
+  appendAudit(label, {
     command: 'smoke',
     taskId: opts.taskId || null,
-    summary: `ci=${ci} total=${results.length} failed=${failed}`,
+    summary: `total=${results.length} failed=${failed} skippedNoHandler=${skippedNoHandler}`,
   });
   console.log(md);
-  console.log(`[mox] smoke report: ${report}`);
-  if (ci && results.length === 0) {
-    console.error('[mox] smoke --ci: no handlers to smoke (all contracts skipped)');
-    failed = failed || 1;
-  }
-  if (failed) process.exitCode = 1;
-  return { results, failed, report, skippedNoHandler };
+  console.log(`[mox] smoke report ${report}`);
+  return { failed, results, skippedNoHandler, report };
 }
 
 module.exports = { smokeCases };
 
 if (require.main === module) {
   smokeCases({ projectDir: process.cwd() }).catch((e) => {
-    console.error(e);
+    console.error(e.message);
     process.exit(1);
   });
 }

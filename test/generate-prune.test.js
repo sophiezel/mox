@@ -9,21 +9,18 @@ const {
   pruneOrphanArtifacts,
 } = require('../scripts/generate-mock');
 const {
-  projectDataDir,
   serviceDataDir,
   stubHandlerPath,
   serviceContractPath,
   stubId,
+  getDataRoot,
 } = require('../lib/paths');
 
-function withTempProject(fn) {
-  const slug = `prune-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
+function withTempServices(fn) {
+  const label = `prune-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
-    return fn(slug);
+    return fn(label);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
     for (const up of ['prune-svc', 'orphan-svc']) {
       try {
         fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
@@ -59,7 +56,7 @@ function makeRole(overrides = {}) {
 }
 
 test('generate force: prunes orphan handlers and contracts', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     // Orphan under the same upstream this generate will touch (so prune walks that service)
     const orphanUp = 'prune-svc';
     const orphanHandler = stubHandlerPath(slug, orphanUp, 'GET', '/v1/orphan');
@@ -86,7 +83,7 @@ test('generate force: prunes orphan handlers and contracts', () => {
 });
 
 test('generate: empty + exportHint still materializes handler (no_property_access alone is not contract-only)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [
       makeRole({
         path: '/v1/addr/init',
@@ -116,7 +113,7 @@ test('generate: empty + exportHint still materializes handler (no_property_acces
 });
 
 test('generate: empty + no_export_symbol is contract-only (no proxy rule)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [
       makeRole({
         path: '/v1/addr/orphan',
@@ -148,7 +145,7 @@ test('generate: empty + no_export_symbol is contract-only (no proxy rule)', () =
 });
 
 test('pruneOrphanArtifacts: keeps mox:manual handlers', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const handler = stubHandlerPath(slug, 'prune-svc', 'GET', '/v1/manual');
     fs.mkdirSync(path.dirname(handler), { recursive: true });
     fs.writeFileSync(

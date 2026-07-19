@@ -3,9 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  ensureProjectDirs,
+  ensureDataDirs,
   ensureServiceDirs,
-  projectDataDir,
   serviceDataDir,
   serviceContractPath,
   stubHandlerPath,
@@ -14,9 +13,9 @@ const {
   apiKey,
   pathDepth,
   sanitizeUpstreamId,
+  listServiceIds,
 } = require('../lib/paths');
 const {
-  writeProjectIndex,
   upsertServiceRules,
 } = require('../lib/catalog-merge');
 const { appendAudit } = require('../lib/audit');
@@ -27,10 +26,62 @@ const {
 } = require('../lib/materialize');
 const {
   normalizeHostLabel,
-  deriveUpstreamId,
+  resolveUpstreamIdFromRole,
+  assertHostsCompatible,
+  realHostsOf,
   pickCanonicalHost,
 } = require('../lib/upstream');
 const { classifyFidelity } = require('../lib/gap-taxonomy');
+
+/** Trusted id if present; else single resolve entry (never reimplement priority here). */
+function roleUpstreamId(roleEntry) {
+  const id = resolveUpstreamIdFromRole(roleEntry);
+  if (id) return id;
+  // Hosts present but consensus failed — never dump into `_default`.
+  const hosts = realHostsOf(
+    roleEntry.hosts ||
+      (roleEntry.host && roleEntry.host !== '_default' ? [roleEntry.host] : []),
+  );
+  if (hosts.length) {
+    const label = normalizeHostLabel(hosts[0]);
+    if (label && label !== 'default') return sanitizeUpstreamId(label);
+  }
+  return '_default';
+}
+
+/**
+ * Fail before any contract write when same service id has disjoint host sets
+ * within this batch or vs on-disk upstreams.json.
+ */
+function assertRolesHostsCompatible(roles) {
+  /** @type {Map<string, string[]>} */
+  const batch = new Map();
+  for (const role of roles) {
+    const id = roleUpstreamId(role);
+    const hosts = realHostsOf(
+      role.hosts ||
+        (role.host && role.host !== '_default' ? [role.host] : []),
+    );
+    if (!batch.has(id)) batch.set(id, []);
+    const acc = batch.get(id);
+    assertHostsCompatible(acc, hosts, { serviceId: id });
+    for (const h of hosts) {
+      if (!acc.includes(h)) acc.push(h);
+    }
+  }
+  for (const [id, hosts] of batch) {
+    const p = path.join(serviceDataDir(id), 'upstreams.json');
+    if (!fs.existsSync(p)) continue;
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch {
+      continue;
+    }
+    const existing = data.upstreams?.[id]?.hosts || [];
+    assertHostsCompatible(existing, hosts, { serviceId: id });
+  }
+}
 
 function hintListToObject(hints) {
   if (!hints) return {};
@@ -129,10 +180,7 @@ function buildStandardCases(dataSample, enumCases = []) {
 }
 
 function buildContract(roleEntry, { taskId, source, resolution }) {
-  const upstreamId = roleEntry.upstreamId || deriveUpstreamId({
-    hostVar: roleEntry.hostVar,
-    hosts: roleEntry.hosts || [roleEntry.host].filter(Boolean),
-  }) || '_default';
+  const upstreamId = roleUpstreamId(roleEntry);
   const hosts = roleEntry.hosts || (roleEntry.host && roleEntry.host !== '_default' ? [roleEntry.host] : []);
   const canonicalHost = roleEntry.canonicalHost || (hosts.length ? pickCanonicalHost(hosts, upstreamId) : null);
   const id = roleEntry.stubId || makeStubId({ upstreamId, method: roleEntry.method, path: roleEntry.path });
@@ -379,76 +427,99 @@ function mergeCasesPreserve(prev = [], next = []) {
   return [...map.values()];
 }
 
-function loadExistingContracts(projectSlug) {
+function loadExistingContracts(_ignored) {
   const { loadContractsForCatalog } = require('../lib/catalog-merge');
+  const { getDataRoot } = require('../lib/paths');
   const map = new Map();
-  for (const c of loadContractsForCatalog(projectSlug)) {
-    if (c.id) map.set(c.id, c);
-    if (c.stubId && c.stubId !== c.id) map.set(c.stubId, c);
+  const root = path.join(getDataRoot(), 'services');
+  const ids = fs.existsSync(root)
+    ? fs.readdirSync(root).filter((n) =>
+        fs.statSync(path.join(root, n)).isDirectory(),
+      )
+    : [];
+  for (const up of ids) {
+    for (const c of loadContractsForCatalog(up)) {
+      if (c.id) map.set(c.id, c);
+      if (c.stubId && c.stubId !== c.id) map.set(c.stubId, c);
+    }
   }
   return map;
 }
 
-function listExistingMockKeys(projectSlug) {
+function listExistingMockKeys(_ignored) {
   const { listMockKeysForCatalog } = require('../lib/catalog-merge');
-  return listMockKeysForCatalog(projectSlug);
+  const { getDataRoot } = require('../lib/paths');
+  const keys = new Set();
+  const root = path.join(getDataRoot(), 'services');
+  const ids = fs.existsSync(root)
+    ? fs.readdirSync(root).filter((n) =>
+        fs.statSync(path.join(root, n)).isDirectory(),
+      )
+    : [];
+  for (const up of ids) {
+    for (const k of listMockKeysForCatalog(up)) keys.add(k);
+  }
+  return keys;
 }
 
-/** Remove gateway-only mocks (path depth <= 1) left by old infer */
-function cleanupGatewayOnlyMocks(projectSlug) {
-  const mocksRoot = path.join(projectDataDir(projectSlug), 'mocks');
-  const contractsDir = path.join(projectDataDir(projectSlug), 'contracts');
+/** Remove gateway-only mocks (path depth <= 1) left by old infer — service catalog only. */
+function cleanupGatewayOnlyMocks(_ignored) {
   let removed = 0;
-  if (!fs.existsSync(mocksRoot)) return removed;
+  for (const up of listServiceIds()) {
+    const mocksRoot = path.join(serviceDataDir(up), 'mocks');
+    const contractsDir = path.join(serviceDataDir(up), 'contracts');
+    if (!fs.existsSync(mocksRoot)) continue;
 
-  function rmHandler(host, parts) {
-    const p = '/' + parts.join('/');
-    if (pathDepth(p) > 1) return;
-    const handler = path.join(mocksRoot, host, ...parts, 'index.js');
-    if (fs.existsSync(handler)) {
-      fs.unlinkSync(handler);
-      removed++;
-      // remove empty dirs
-      try {
-        fs.rmdirSync(path.join(mocksRoot, host, ...parts));
-      } catch {
-        /* ignore */
-      }
-    }
-    // remove matching contracts
-    if (fs.existsSync(contractsDir)) {
-      for (const f of fs.readdirSync(contractsDir)) {
-        if (!f.endsWith('.json')) continue;
+    function rmHandler(parts) {
+      const p = '/' + parts.join('/');
+      if (pathDepth(p) > 1) return;
+      const handler = path.join(mocksRoot, ...parts, 'index.js');
+      if (fs.existsSync(handler)) {
+        fs.unlinkSync(handler);
+        removed++;
         try {
-          const c = JSON.parse(
-            fs.readFileSync(path.join(contractsDir, f), 'utf8'),
-          );
-          if (c.host === host && c.path === p && pathDepth(p) <= 1) {
-            fs.unlinkSync(path.join(contractsDir, f));
-          }
+          fs.rmdirSync(path.join(mocksRoot, ...parts));
         } catch {
           /* ignore */
         }
       }
-    }
-  }
-
-  function walkDir(dir, host, parts) {
-    if (!fs.existsSync(dir)) return;
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, ent.name);
-      if (ent.isDirectory()) {
-        walkDir(full, host, [...parts, ent.name]);
-        // after children, if this is depth-1 leaf with index already removed
-      } else if (ent.name === 'index.js') {
-        rmHandler(host, parts);
+      if (fs.existsSync(contractsDir)) {
+        for (const f of fs.readdirSync(contractsDir)) {
+          if (!f.endsWith('.json')) continue;
+          try {
+            const c = JSON.parse(
+              fs.readFileSync(path.join(contractsDir, f), 'utf8'),
+            );
+            if (c.path === p && pathDepth(p) <= 1) {
+              fs.unlinkSync(path.join(contractsDir, f));
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       }
     }
-  }
 
-  for (const hostEnt of fs.readdirSync(mocksRoot, { withFileTypes: true })) {
-    if (!hostEnt.isDirectory()) continue;
-    walkDir(path.join(mocksRoot, hostEnt.name), hostEnt.name, []);
+    function walkDir(dir, parts) {
+      if (!fs.existsSync(dir)) return;
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          walkDir(full, [...parts, ent.name]);
+        } else if (ent.name === 'index.js') {
+          // Skip METHOD segment for depth check when layout is METHOD/path
+          const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+          const pathParts =
+            parts.length && methods.includes(parts[0]) ? parts.slice(1) : parts;
+          rmHandler(pathParts);
+        }
+      }
+    }
+
+    for (const ent of fs.readdirSync(mocksRoot, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      walkDir(path.join(mocksRoot, ent.name), [ent.name]);
+    }
   }
   return removed;
 }
@@ -467,17 +538,9 @@ function rmEmptyParents(startDir, stopDir) {
 
 /**
  * After --force generate: delete handlers/contracts not in this round's whitelist
- * and without mox:manual. Handlers whitelist = stubIds; contracts =
- * all stubIds written this round (including contract-only skips).
- *
- * Walks service catalog (services/<up>/mocks/<METHOD>/<path>) and legacy
- * project mocks layouts.
+ * and without mox:manual. Walks service catalog only.
  */
-function pruneOrphanArtifacts(projectSlug, { keepHandlerKeys, keepContractKeys }) {
-  const { serviceDataDir } = require('../lib/paths');
-  const { readProjectIndex } = require('../lib/catalog-merge');
-  const mocksRoot = path.join(projectDataDir(projectSlug), 'mocks');
-  const contractsDir = path.join(projectDataDir(projectSlug), 'contracts');
+function pruneOrphanArtifacts(_ignored, { keepHandlerKeys, keepContractKeys, upstreamIds: extraUps }) {
   let prunedHandlers = 0;
   let prunedContracts = 0;
   const handlerKeep = keepHandlerKeys instanceof Set ? keepHandlerKeys : new Set(keepHandlerKeys || []);
@@ -498,28 +561,8 @@ function pruneOrphanArtifacts(projectSlug, { keepHandlerKeys, keepContractKeys }
     rmEmptyParents(path.dirname(full), stopDir);
   }
 
-  // Legacy project mocks: mocks/<up>/<METHOD>/... or FQDN
-  if (fs.existsSync(mocksRoot)) {
-    function walkMocks(dir, parts) {
-      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, ent.name);
-        if (ent.isDirectory()) {
-          walkMocks(full, [...parts, ent.name]);
-        } else if (ent.name === 'index.js') {
-          pruneHandlerFile(full, mocksRoot, reconstructStubIds(parts));
-        }
-      }
-    }
-    for (const ent of fs.readdirSync(mocksRoot, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue;
-      walkMocks(path.join(mocksRoot, ent.name), [ent.name]);
-    }
-  }
-
-  // Service catalog mocks: only services touched by this project / whitelist / project contracts
-  const idx = readProjectIndex(projectSlug);
   const { parseStubId } = require('../lib/paths');
-  const serviceIds = new Set([...(idx?.upstreams || [])]);
+  const serviceIds = new Set([...(extraUps || [])].map(sanitizeUpstreamId));
   for (const id of handlerKeep) {
     try {
       serviceIds.add(parseStubId(id).upstreamId);
@@ -534,24 +577,6 @@ function pruneOrphanArtifacts(projectSlug, { keepHandlerKeys, keepContractKeys }
       /* ignore */
     }
   }
-  if (fs.existsSync(contractsDir)) {
-    for (const f of fs.readdirSync(contractsDir)) {
-      if (!f.endsWith('.json')) continue;
-      try {
-        const c = JSON.parse(fs.readFileSync(path.join(contractsDir, f), 'utf8'));
-        if (c.upstreamId) serviceIds.add(sanitizeUpstreamId(c.upstreamId));
-        if (c.stubId || c.id) {
-          try {
-            serviceIds.add(parseStubId(c.stubId || c.id).upstreamId);
-          } catch {
-            /* ignore */
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }
   for (const up of serviceIds) {
     const svcMocks = path.join(serviceDataDir(up), 'mocks');
     if (!fs.existsSync(svcMocks)) continue;
@@ -561,7 +586,6 @@ function pruneOrphanArtifacts(projectSlug, { keepHandlerKeys, keepContractKeys }
         if (ent.isDirectory()) {
           walkSvc(full, [...parts, ent.name]);
         } else if (ent.name === 'index.js') {
-          // parts = [METHOD, ...pathSegs]
           const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
           let candidates = [];
           if (parts.length >= 1 && methods.includes(parts[0])) {
@@ -599,24 +623,6 @@ function pruneOrphanArtifacts(projectSlug, { keepHandlerKeys, keepContractKeys }
     }
   }
 
-  if (fs.existsSync(contractsDir)) {
-    for (const f of fs.readdirSync(contractsDir)) {
-      if (!f.endsWith('.json')) continue;
-      const full = path.join(contractsDir, f);
-      let c;
-      try {
-        c = JSON.parse(fs.readFileSync(full, 'utf8'));
-      } catch {
-        continue;
-      }
-      const id = c.id || c.stubId || apiKey(c);
-      if (contractKeep.has(id)) continue;
-      if (c.manual === true || c['mox:manual'] === true) continue;
-      fs.unlinkSync(full);
-      prunedContracts++;
-    }
-  }
-
   return { prunedHandlers, prunedContracts };
 }
 
@@ -650,13 +656,13 @@ function generateMocks({
   merge = true,
   overwriteCapture = false,
 }) {
-  ensureProjectDirs(projectSlug);
+  ensureDataDirs();
   const removedGateway = cleanupGatewayOnlyMocks(projectSlug);
 
   const conflictKeys = new Set(
     conflicts.filter((c) => !c.resolution).map((c) => c.apiKey),
   );
-  const existing = loadExistingContracts(projectSlug);
+  const existing = loadExistingContracts();
   let generated = 0;
   let skipped = 0;
   let reused = 0;
@@ -752,15 +758,10 @@ function generateMocks({
     return pathDepth(p) > 1;
   });
 
+  assertRolesHostsCompatible(filteredRoles);
+
   for (const roleEntry of filteredRoles) {
-    const upstreamId = sanitizeUpstreamId(
-      roleEntry.upstreamId ||
-        deriveUpstreamId({
-          hostVar: roleEntry.hostVar,
-          hosts: roleEntry.hosts || [roleEntry.host].filter(Boolean),
-        }) ||
-        '_default',
-    );
+    const upstreamId = roleUpstreamId(roleEntry);
     const hosts = roleEntry.hosts || (roleEntry.host && roleEntry.host !== '_default' ? [roleEntry.host] : []);
     const canonicalHost = roleEntry.canonicalHost || (hosts.length ? pickCanonicalHost(hosts, upstreamId) : null);
     const key = roleEntry.stubId || makeStubId({ upstreamId, method: roleEntry.method, path: roleEntry.path });
@@ -892,14 +893,7 @@ function generateMocks({
     upsertServiceRules(up, list);
     const upstreamsMap = {};
     for (const roleEntry of filteredRoles) {
-      const u = sanitizeUpstreamId(
-        roleEntry.upstreamId ||
-          deriveUpstreamId({
-            hostVar: roleEntry.hostVar,
-            hosts: roleEntry.hosts || [roleEntry.host].filter(Boolean),
-          }) ||
-          '_default',
-      );
+      const u = roleUpstreamId(roleEntry);
       if (u !== up) continue;
       const h = roleEntry.hosts || (roleEntry.host && roleEntry.host !== '_default' ? [roleEntry.host] : []);
       const ch = roleEntry.canonicalHost || (h.length ? pickCanonicalHost(h, u) : null);
@@ -913,17 +907,13 @@ function generateMocks({
     );
   }
 
-  // Frontend discovery index only (no catalog dual-write under projects/)
-  writeProjectIndex(projectSlug, {
-    stubs: stubIds,
-    upstreams: [...upstreamIds],
-  });
-
+  // Catalog truth is services only (no project index)
   if (force) {
     const keepHandlerKeys = new Set(rules.map((r) => r.id));
     const pruned = pruneOrphanArtifacts(projectSlug, {
       keepHandlerKeys,
       keepContractKeys,
+      upstreamIds: [...upstreamIds],
     });
     prunedHandlers = pruned.prunedHandlers;
     prunedContracts = pruned.prunedContracts;

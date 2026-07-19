@@ -5,7 +5,7 @@
  * Session file update; running proxy picks up via trafficLoader ≤1s.
  */
 
-const { resolveProjectSlug } = require('../lib/paths');
+const { resolveScanLabel } = require('../lib/paths');
 const { loadSession, saveSession } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
 const {
@@ -23,12 +23,12 @@ const { assertStubId } = require('./set-case');
  * @param {string} [opts.projectDir]
  */
 function setTraffic(opts = {}) {
-  const projectSlug = resolveProjectSlug(
+  const label = resolveScanLabel(
     opts.projectDir || process.cwd(),
     opts.name,
   );
   const action = String(opts.action || '').toLowerCase();
-  const cfg = loadSession(projectSlug);
+  const cfg = loadSession();
   const proxy = { ...(cfg.proxy || {}) };
   let mode = proxy.trafficMode || 'all-mock';
   let list = Array.isArray(proxy.mockAllowlist) ? [...proxy.mockAllowlist] : [];
@@ -42,10 +42,10 @@ function setTraffic(opts = {}) {
 
   if (action === 'clear') {
     list = [];
-    saveSession(projectSlug, {
+    saveSession({
       proxy: { ...proxy, mockAllowlist: list },
     });
-    appendAudit(projectSlug, {
+    appendAudit(label, {
       command: 'traffic',
       summary: 'clear allowlist',
     });
@@ -65,8 +65,8 @@ function setTraffic(opts = {}) {
         `[mox] hint: trafficMode is "${mode}"; allowlist only applies in selective. Run: mox traffic selective`,
       );
     }
-    saveSession(projectSlug, { proxy: { ...proxy, ...patch } });
-    appendAudit(projectSlug, {
+    saveSession({ proxy: { ...proxy, ...patch } });
+    appendAudit(label, {
       command: 'traffic',
       apiKey: stubId,
       summary: 'allow',
@@ -81,10 +81,10 @@ function setTraffic(opts = {}) {
     if (!stubId) throw new Error('Usage: mox traffic deny <stubId>');
     assertStubId(stubId);
     list = list.filter((x) => x !== stubId);
-    saveSession(projectSlug, {
+    saveSession({
       proxy: { ...proxy, mockAllowlist: list },
     });
-    appendAudit(projectSlug, {
+    appendAudit(label, {
       command: 'traffic',
       apiKey: stubId,
       summary: 'deny',
@@ -98,10 +98,10 @@ function setTraffic(opts = {}) {
   const modeArg = action === 'set' ? opts.mode : action;
   if (VALID_MODES.has(modeArg) || opts.mode) {
     mode = normalizeTrafficMode(opts.mode || modeArg);
-    saveSession(projectSlug, {
+    saveSession({
       proxy: { ...proxy, trafficMode: mode },
     });
-    appendAudit(projectSlug, {
+    appendAudit(label, {
       command: 'traffic',
       summary: `mode=${mode}`,
     });

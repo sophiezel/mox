@@ -45,7 +45,7 @@ mox start --name=demo
 # mox start --name=demo --start-url=http://localhost:8080
 ```
 
-Catalog（真源）在 `.data/services/<upstreamId>/`；项目索引在 `.data/projects/demo/index.json`；运行时状态在全局 `.data/session.json`。`init` 会静默写出域草稿并尽量绑上 CRUD Store；`start` 默认清空 Store（保留用 `--keep-state`）。停掉：
+Catalog（真源）在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`；运行时状态在全局 `.data/session.json`。`init` 会静默写出域草稿并尽量绑上 CRUD Store；`start` 默认清空 Store（保留用 `--keep-state`）。停掉：
 
 ```bash
 mox stop

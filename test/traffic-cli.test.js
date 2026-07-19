@@ -22,9 +22,6 @@ function withSlug(fn) {
     } catch (_) {
       /* ignore */
     }
-    const { projectDataDir } = require('../lib/paths');
-    const dir = projectDataDir(slug);
-    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 

@@ -41,7 +41,7 @@ case 形状（向后兼容）：
 
 ## Scenario 批量切换
 
-文件 `.data/projects/<slug>/scenarios/<name>.json`：
+文件 `.data/scenarios/<name>.json`：
 
 ```json
 {

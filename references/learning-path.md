@@ -2,6 +2,8 @@
 
 系统学习地图。主路径使用者只需 **L0**；要理解「为什么 mock 像后端」再往下走。
 
+先扫身份词：[docs/GLOSSARY.md](../docs/GLOSSARY.md)（service id / stub / Catalog / scenario）。
+
 每一层专章固定五段：**目标 → 前置 → 逐步操作 → 验收 → 边界与下一层**。按顺序跟做，不要跳层硬啃 Advanced 命令。
 
 ## 推荐顺序

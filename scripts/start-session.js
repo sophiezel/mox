@@ -6,10 +6,9 @@ const { spawn } = require('child_process');
 const net = require('net');
 const os = require('os');
 const {
-  ensureProjectDirs,
-  projectDataDir,
   chromeProfileDir,
   ensureChromeProfileDir,
+  auditDir,
 } = require('../lib/paths');
 const {
   loadSession,
@@ -25,7 +24,6 @@ const {
   capturesDirFor,
   parseNameList,
   expandMountKey,
-  readProjectIndex,
 } = require('../lib/catalog-merge');
 const {
   parseRulesKeywords,
@@ -162,18 +160,11 @@ async function startSession(opts = {}) {
     names: names.length ? names : undefined,
     allIfEmpty: true,
   });
-  const { ensureServiceDirs } = require('../lib/paths');
+  const { ensureServiceDirs, ensureDataDirs, auditDir } = require('../lib/paths');
+  ensureDataDirs();
   for (const key of catalogs) {
-    const { services, legacyProject } = expandMountKey(key);
-    // Project slug ≠ upstreamId: only ensure project dirs for projects
-    if (readProjectIndex(key) || legacyProject) {
-      try {
-        ensureProjectDirs(key);
-      } catch {
-        /* ignore */
-      }
-    }
-    for (const up of services) {
+    const { services } = expandMountKey(key);
+    for (const up of services.length ? services : [key]) {
       try {
         ensureServiceDirs(up);
       } catch {
@@ -313,7 +304,7 @@ async function startSession(opts = {}) {
       capturesDir: capturesDirFor(primary),
       resolveCapturesDir,
       taskId,
-      accessLogPath: path.join(projectDataDir(primary), 'audit', 'proxy-access.jsonl'),
+      accessLogPath: path.join(auditDir(), 'proxy-access.jsonl'),
     });
     console.log(
       `[mox] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,

@@ -16,10 +16,9 @@ const { startProxyServer } = require('../runtime/proxy/server');
 const { smokeCases } = require('./smoke-cases');
 const { setScenario } = require('./set-scenario');
 const { loadSession, saveSession } = require('../lib/session-config');
-const { projectDataDir, ensureProjectDirs } = require('../lib/paths');
+const { getDataRoot, ensureDataDirs, listServiceIds } = require('../lib/paths');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'generic-web');
-const SLUG = 'generic-web-fixture';
 const TASK_ID = 'fixture-smoke';
 
 function reqProxy(proxyUrl, target) {
@@ -68,14 +67,18 @@ async function verifyScenarioViaProxy(proxyUrl, rules, expectedStatus, proxy) {
 }
 
 async function run() {
-  // 0. clean stale project data for a deterministic CI gate
-  fs.rmSync(projectDataDir(SLUG), { recursive: true, force: true });
+  // Isolate fixture smoke under a temp data root when not already set
+  if (!process.env.MOX_DATA_ROOT) {
+    const tmp = path.join(getDataRoot(), '..', `.data-fixture-smoke-${Date.now()}`);
+    process.env.MOX_DATA_ROOT = tmp;
+  }
+  const dataRoot = getDataRoot();
+  fs.rmSync(dataRoot, { recursive: true, force: true });
+  ensureDataDirs();
 
-  // 1. init
   console.log('[fixture-smoke] init fixtures/generic-web');
   const initRes = await initProject({
     projectDir: FIXTURE_DIR,
-    name: SLUG,
     taskId: TASK_ID,
     force: true,
   });
@@ -83,30 +86,37 @@ async function run() {
     `[fixture-smoke] discovered=${initRes.apis.length} generated=${initRes.gen.generated} skippedEmpty=${initRes.gen.skippedEmptyCount ?? '?'}`,
   );
 
-  ensureProjectDirs(SLUG);
-  const { mocksRootFor, mergeCatalogs, loadContractsForCatalog, handlerExistsForContract } = require('../lib/catalog-merge');
-  const contracts = loadContractsForCatalog(SLUG);
-  const hasHandler = contracts.some((c) => handlerExistsForContract(c, SLUG));
+  const {
+    mocksRootFor,
+    mergeCatalogs,
+    loadContractsAcross,
+    handlerExistsForContract,
+  } = require('../lib/catalog-merge');
+  const services = listServiceIds();
+  if (!services.length) {
+    throw new Error('no services after init');
+  }
+  const contracts = loadContractsAcross(services);
+  const hasHandler = contracts.some((c) => handlerExistsForContract(c));
   if (!hasHandler) {
     throw new Error('no mocks generated for fixture');
   }
 
-  const rules = mergeCatalogs([SLUG]).rules;
+  const rules = mergeCatalogs(services).rules;
   if (rules.length === 0) {
     throw new Error(
       'no proxy-rules after init — fixture pages must consume APIs so handlers materialize',
     );
   }
 
-  const merged = mergeCatalogs([SLUG]);
-  const primaryRoot = mocksRootFor(merged.catalogs[0] || SLUG);
+  const merged = mergeCatalogs(services);
+  const primaryRoot = mocksRootFor(merged.catalogs[0]);
   const stubToCatalog = merged.stubToCatalog;
   const resolveMocksRoot = (stubId) => {
     const key = stubToCatalog[stubId];
     return key ? mocksRootFor(key) : primaryRoot;
   };
 
-  // 2. start mock on ephemeral port
   const srv = await startMockServer({
     mocksRoot: primaryRoot,
     resolveMocksRoot,
@@ -117,21 +127,20 @@ async function run() {
 
   let failed = 0;
   try {
-    saveSession(SLUG, { mock: { host: '127.0.0.1', port: srv.port } });
+    saveSession({ mock: { host: '127.0.0.1', port: srv.port }, activeCatalogs: services });
 
-    const r1 = await smokeCases({ name: SLUG, ci: true, taskId: TASK_ID });
+    const r1 = await smokeCases({ ci: true, taskId: TASK_ID });
     failed += r1.failed;
     console.log(`[fixture-smoke] smoke --ci: failed=${r1.failed} results=${r1.results.length}`);
 
-    // 4. set-scenario e2e-fault → default http_500; verify via PROXY
-    setScenario({ name: SLUG, scenario: 'e2e-fault' });
-    const casesLoader = () => loadSession(SLUG).cases || { default: 'success', active: {} };
+    setScenario({ scenario: 'e2e-fault' });
+    const casesLoader = () => loadSession().cases || { default: 'success', active: {} };
     const proxy = await startProxyServer({
       host: '127.0.0.1',
       port: 0,
       mockTarget: srv.url,
       rules,
-      cases: loadSession(SLUG).cases,
+      cases: loadSession().cases,
       casesLoader,
       caseHeader: 'x-mock-case',
     });
@@ -145,7 +154,7 @@ async function run() {
         console.log('[fixture-smoke] e2e-fault default=500 via proxy: verified');
       }
 
-      setScenario({ name: SLUG, scenario: 'e2e-happy' });
+      setScenario({ scenario: 'e2e-happy' });
       proxy.invalidateCasesCache();
       const happyFails = await verifyScenarioViaProxy(proxy.url, rules, 200, proxy);
       if (happyFails > 0) {

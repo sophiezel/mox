@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveProjectSlug, projectDataDir } = require('../lib/paths');
+const { getDataRoot, resolveScanLabel } = require('../lib/paths');
 const {
   loadRuntimeState,
   saveRuntimeState,
@@ -10,6 +10,7 @@ const {
 } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
 const { journalSummary } = require('../lib/service-store');
+const { parseNameList } = require('../lib/catalog-merge');
 
 function pidAlive(pid) {
   if (!pid || typeof pid !== 'number') return false;
@@ -31,28 +32,38 @@ function tryKill(pid, signal = 'SIGTERM') {
   }
 }
 
-/** Count capture artifact files under captures/. */
-function countCaptureFiles(projectSlug) {
-  const root = path.join(projectDataDir(projectSlug), 'captures');
+/** Count capture artifact files under services/{id}/captures (or filtered). */
+function countCaptureFiles(upstreamIds) {
+  const root = path.join(getDataRoot(), 'services');
   if (!fs.existsSync(root)) return 0;
+  const filter =
+    Array.isArray(upstreamIds) && upstreamIds.length
+      ? new Set(upstreamIds)
+      : null;
   let n = 0;
   const walk = (dir) => {
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
       const st = fs.statSync(full);
       if (st.isDirectory()) walk(full);
-      else if (st.isFile() && (name.endsWith('.json') || name.endsWith('.jsonl'))) n += 1;
+      else if (st.isFile() && (name.endsWith('.json') || name.endsWith('.jsonl'))) {
+        n += 1;
+      }
     }
   };
-  walk(root);
+  for (const up of fs.readdirSync(root)) {
+    if (filter && !filter.has(up)) continue;
+    const cap = path.join(root, up, 'captures');
+    if (fs.existsSync(cap)) walk(cap);
+  }
   return n;
 }
 
-function hintMergeIfCaptures(projectSlug) {
-  const n = countCaptureFiles(projectSlug);
+function hintMergeIfCaptures(upstreamIds) {
+  const n = countCaptureFiles(upstreamIds);
   if (n > 0) {
     console.log(
-      `[mox] hint: ${n} capture file(s) in ${projectSlug} — run: mox merge --name=${projectSlug}`,
+      `[mox] hint: ${n} capture file(s) — run: mox merge`,
     );
     console.log(
       `[mox] hint: or next time: mox stop --auto-merge`,
@@ -63,34 +74,32 @@ function hintMergeIfCaptures(projectSlug) {
 
 function stopSession(opts = {}) {
   const projectDir = opts.projectDir || process.cwd();
-  const hintSlug = resolveProjectSlug(projectDir, opts.name);
-  const state = loadRuntimeState(hintSlug);
+  const label = resolveScanLabel(projectDir, opts.name);
+  const named = parseNameList(opts.name);
+  const state = loadRuntimeState();
 
   let catalogs;
   if (state && Array.isArray(state.activeCatalogs) && state.activeCatalogs.length) {
     catalogs = state.activeCatalogs;
-  } else if (opts.name) {
-    catalogs = [hintSlug];
+  } else if (named.length) {
+    catalogs = named;
   } else {
     const sessionCatalogs = loadSession().activeCatalogs || [];
-    catalogs = sessionCatalogs.length ? sessionCatalogs : [hintSlug];
+    catalogs = sessionCatalogs.length ? sessionCatalogs : [];
   }
-  const primary = (state && state.projectSlug) || catalogs[0] || hintSlug;
+  const primary = (state && state.projectSlug) || catalogs[0] || label;
 
   if (!state) {
     console.log('[mox] no runtime state; nothing to stop');
     const journal = journalSummary();
     console.log(journal.line);
-    let captureCount = 0;
-    for (const slug of catalogs) {
-      captureCount += hintMergeIfCaptures(slug) || 0;
-    }
+    const captureCount = hintMergeIfCaptures(catalogs);
     let mergeResult = null;
     if (opts.autoMerge) {
       const { captureMerge } = require('./capture-merge');
-      mergeResult = catalogs.map((slug) =>
-        captureMerge(slug, { taskId: opts.taskId || null }),
-      );
+      mergeResult = captureMerge({
+        taskId: opts.taskId || null,
+      });
     }
     return {
       killed: false,
@@ -137,24 +146,19 @@ function stopSession(opts = {}) {
     summary: `stop killedSession=${killedSession} killedChrome=${killedChrome} catalogs=${catalogs.join(',')}`,
   });
   console.log(
-    `[mox] stop catalogs=${catalogs.join(',')} sessionPid=${sessionPid || '-'} killed=${killedSession} chromePid=${chromePid || '-'} killed=${killedChrome}`,
+    `[mox] stop catalogs=${catalogs.join(',') || '(none)'} sessionPid=${sessionPid || '-'} killed=${killedSession} chromePid=${chromePid || '-'} killed=${killedChrome}`,
   );
 
   const journal = journalSummary();
   console.log(journal.line);
 
-  let captureCount = 0;
-  for (const slug of catalogs) {
-    captureCount += hintMergeIfCaptures(slug) || 0;
-  }
+  const captureCount = hintMergeIfCaptures(catalogs);
   let mergeResult = null;
   if (opts.autoMerge) {
     const { captureMerge } = require('./capture-merge');
-    mergeResult = catalogs.map((slug) =>
-      captureMerge(slug, {
-        taskId: opts.taskId || state.taskId || null,
-      }),
-    );
+    mergeResult = captureMerge({
+      taskId: opts.taskId || state.taskId || null,
+    });
   }
 
   return {

@@ -68,17 +68,17 @@ function help(full = false) {
 mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
-  mox init [projectDir] [--name=slug] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mox start [--name=slug…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=1] [--keep-state] [--detach]
+  mox init [scanDir] [--task=ID] [--adapter=name] [--force] [--strict-usage]
+  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=1] [--keep-state] [--detach]
   mox stop [--auto-merge]
   mox rules list|use <kw…>|save <name> [--rules-dir=DIR]
-  mox scenario <name> [--name=slug]
-  mox smoke [--name=slug] [--ci] [--cases=...] [--scenario=NAME]
+  mox scenario <name>
+  mox smoke [--name=serviceId…] [--ci] [--cases=...] [--scenario=NAME]
 
 Optional (needs real upstream; not for E2E):
-  mox start --record [--name=slug…]
+  mox start --record [--name=serviceId…]
   mox record | mock
-  mox merge [--name=slug]
+  mox merge [--name=serviceId…]
 `;
 
   const advanced = `
@@ -93,7 +93,7 @@ Advanced / legacy (see references/guide-l6-advanced.md):
   mox set-scenario <name>
   mox traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]
   mox capture-merge [...]
-  mox list-empty [--gap=GAP] [--all]
+  mox list-empty [--gap=GAP] [--all] [--name=serviceId…]
   mox import-openapi --from=<spec>
   mox export-msw [--out=path]
   mox audit [--task=ID] [--api=host/path]
@@ -104,7 +104,7 @@ Session security:
   --mitm=1             enable HTTPS MITM for matched hosts (requires openssl; trust printed CA)
 
 Flags:
-  --name=a --name=b    mount multiple catalogs (or --name=a,b); omit = all catalogs
+  --name=a --name=b    mount service ids (or --name=a,b); omit = all services
   --rules kw1 kw2      selective mock; with --record still selective (record passthrough only)
   --rules-dir=DIR      override rules directory (default: <pkg>/rules)
   --record             alone: all-passthrough; with --rules: record passthrough only
@@ -115,8 +115,9 @@ Flags:
 
   const footer = `
 Install: bash scripts/install.sh
-Catalog: .data/services/<upstreamId>/   Project index: .data/projects/<slug>/
+Catalog: .data/services/<serviceId>/   Ops: .data/{classify,reports,audit,scenarios}/
 Session: .data/session.json   Rules: rules/
+Glossary: docs/GLOSSARY.md
 Learn:   references/learning-path.md  (L0→L6 layered guides)
 Help:    mox help --all
 `;
@@ -315,10 +316,8 @@ function runTraffic(f, action, stubId) {
 }
 
 function runMerge(f) {
-  const { resolveProjectSlug } = require('../lib/paths');
   const { captureMerge } = require('../scripts/capture-merge');
-  const projectSlug = resolveProjectSlug(process.cwd(), f.name);
-  captureMerge(projectSlug, {
+  captureMerge({
     taskId: f.task || null,
     sanitize: f.sanitize !== false,
     sensitivePaths: f['sensitive-paths']
@@ -389,20 +388,20 @@ async function main() {
   if (cmd === 'classify') {
     const { inferApiUsage } = require('../scripts/infer-api-usage');
     const { classifyRequests, writeClassifyResult } = require('../scripts/classify-requests');
-    const { resolveProjectSlug, ensureProjectDirs } = require('../lib/paths');
+    const { ensureDataDirs, resolveScanLabel } = require('../lib/paths');
     const { loadExistingContracts, listExistingMockKeys } = require('../scripts/generate-mock');
     const projectDir = rest[0] || process.cwd();
-    const projectSlug = resolveProjectSlug(projectDir, f.name);
-    ensureProjectDirs(projectSlug);
+    ensureDataDirs();
+    const label = resolveScanLabel(projectDir, f.name);
     const apis = inferApiUsage(projectDir);
     const result = classifyRequests({
       apis,
       taskId: f.task || null,
       relatedFrom: f['related-from'] || null,
-      existingMockKeys: listExistingMockKeys(projectSlug),
-      existingContracts: loadExistingContracts(projectSlug),
+      existingMockKeys: listExistingMockKeys(),
+      existingContracts: loadExistingContracts(),
     });
-    const file = writeClassifyResult(projectSlug, result);
+    const file = writeClassifyResult(label, result);
     console.log(
       `[mox] wrote ${file} (${result.roles.length} roles, ${result.conflicts.length} conflicts)`,
     );
@@ -410,18 +409,19 @@ async function main() {
   }
 
   if (cmd === 'generate') {
-    const { resolveProjectSlug, projectDataDir } = require('../lib/paths');
+    const { ensureDataDirs, classifyDir, resolveScanLabel } = require('../lib/paths');
     const { generateMocks } = require('../scripts/generate-mock');
     const fs = require('fs');
     const projectDir = rest[0] || process.cwd();
-    const projectSlug = resolveProjectSlug(projectDir, f.name);
-    const rolesFile = path.join(projectDataDir(projectSlug), 'classify', 'request-roles.json');
+    ensureDataDirs();
+    const label = resolveScanLabel(projectDir, f.name);
+    const rolesFile = path.join(classifyDir(), 'request-roles.json');
     if (!fs.existsSync(rolesFile)) {
       throw new Error('no classify result — run mox init or classify first');
     }
     const classified = JSON.parse(fs.readFileSync(rolesFile, 'utf8'));
     const gen = generateMocks({
-      projectSlug,
+      projectSlug: label,
       roles: classified.roles,
       conflicts: classified.conflicts || [],
       taskId: f.task || classified.taskId || null,
@@ -557,10 +557,8 @@ async function main() {
   }
 
   if (cmd === 'audit') {
-    const { resolveProjectSlug } = require('../lib/paths');
     const { readAudit } = require('../lib/audit');
-    const projectSlug = resolveProjectSlug(process.cwd(), f.name);
-    const rows = readAudit(projectSlug, { taskId: f.task, api: f.api });
+    const rows = readAudit({ taskId: f.task, api: f.api });
     console.log(JSON.stringify(rows, null, 2));
     console.log(`[mox] ${rows.length} audit rows`);
     return;
@@ -572,11 +570,12 @@ async function main() {
   }
 
   if (cmd === 'list-empty') {
-    const { resolveProjectSlug } = require('../lib/paths');
+    const { parseNameList } = require('../lib/catalog-merge');
     const { listEmptyStubs, listByFidelity } = require('../lib/list-empty');
-    const projectSlug = resolveProjectSlug(process.cwd(), f.name);
+    const names = parseNameList(f.name);
+    const scope = names.length ? names : null;
     if (f.all) {
-      const grouped = listByFidelity(projectSlug);
+      const grouped = listByFidelity(scope);
       for (const lvl of ['L0', 'L1', 'L2', 'L3']) {
         console.log(`## ${lvl} (${grouped[lvl].length})`);
         for (const r of grouped[lvl]) {
@@ -585,7 +584,7 @@ async function main() {
       }
       return;
     }
-    const rows = listEmptyStubs(projectSlug, { gap: f.gap || null });
+    const rows = listEmptyStubs(scope, { gap: f.gap || null });
     if (!rows.length) {
       console.log('[mox] no empty stubs — all stubs have shape or capture');
       return;

@@ -6,16 +6,16 @@
 
 ## 前置
 
-[L0](./guide-l0-getting-started.md) 验收通过；手上有一次 `init --name=demo` 的产物。
+[L0](./guide-l0-getting-started.md) 验收通过；手上有一次 `mox init` 的产物。
 
 ## 逐步操作
 
-### 1. 看项目索引
+### 1. 看全局 classify
 
 ```bash
 # 仓库根或任意目录（数据在 MOX_DATA_ROOT / 本仓 .data）
-ls .data/projects/demo/
-cat .data/projects/demo/classify/request-roles.json | head
+ls .data/classify/
+cat .data/classify/request-roles.json | head
 ```
 
 关注每条 role：`host` / `path` / `method`、`coverage.gaps`。
@@ -29,6 +29,7 @@ ls .data/services/<upstreamId>/contracts | head
 ls .data/services/<upstreamId>/mocks | head
 ```
 
+**不应**再找 `.data/projects/`。
 契约与 handler 的**真源**在 services；project 下是索引与 classify / captures。
 
 ### 3. 理解「不发明字段」

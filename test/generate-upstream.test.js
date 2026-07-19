@@ -8,20 +8,17 @@ const {
   generateMocks,
 } = require('../scripts/generate-mock');
 const {
-  projectDataDir,
   serviceDataDir,
   stubHandlerPath,
   serviceContractPath,
+  getDataRoot,
 } = require('../lib/paths');
 
-function withTempProject(fn) {
-  const slug = `gen-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
+function withTempServices(fn) {
+  const label = `gen-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
-    return fn(slug);
+    return fn(label);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
     try {
       fs.rmSync(serviceDataDir('svc-a'), { recursive: true, force: true });
     } catch {
@@ -56,7 +53,7 @@ function makeRole(overrides = {}) {
 }
 
 test('G1: generate writes handler at stubHandlerPath (no FQDN dir), rule.hosts>=2', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [makeRole()];
     const gen = generateMocks({ projectSlug: slug, roles, force: true, merge: false });
     assert.equal(gen.generated, 1);
@@ -69,13 +66,8 @@ test('G1: generate writes handler at stubHandlerPath (no FQDN dir), rule.hosts>=
       'handler lives under services catalog',
     );
 
-    // No dual-write catalog shells under projects/
-    const proj = projectDataDir(slug);
-    assert.ok(!fs.existsSync(path.join(proj, 'mocks')) || fs.readdirSync(path.join(proj, 'mocks')).length === 0);
-    assert.ok(!fs.existsSync(path.join(proj, 'contracts')));
-    assert.ok(!fs.existsSync(path.join(proj, 'proxy-rules.json')));
-    assert.ok(!fs.existsSync(path.join(proj, 'upstreams.json')));
-    assert.ok(fs.existsSync(path.join(proj, 'index.json')), 'project index retained');
+    // No catalog dual-write under projects/
+    assert.ok(!fs.existsSync(path.join(getDataRoot(), 'projects')));
     assert.ok(fs.existsSync(serviceDataDir('svc-a')), 'service catalog exists');
 
     // proxy-rules under service
@@ -97,14 +89,14 @@ test('G1: generate writes handler at stubHandlerPath (no FQDN dir), rule.hosts>=
 });
 
 test('G2: prune --force removes old FQDN tree, keeps manual', () => {
-  withTempProject((slug) => {
-    const mocksRoot = path.join(projectDataDir(slug), 'mocks');
-    // Create an old-style FQDN handler (legacy residue)
+  withTempServices((slug) => {
+    const mocksRoot = path.join(serviceDataDir('svc-a'), 'mocks');
+    // Create an old-style FQDN handler (legacy residue under service catalog)
     const oldFqdnDir = path.join(mocksRoot, 'svc-a.example.com', 'GET', 'v1', 'items');
     fs.mkdirSync(oldFqdnDir, { recursive: true });
     fs.writeFileSync(path.join(oldFqdnDir, 'index.js'), 'module.exports = () => ({});\n');
 
-    // Create a manual handler under the legacy project layout
+    // Create a manual handler under the service catalog layout
     const manualDir = path.join(mocksRoot, 'svc-a', 'GET', 'v1', 'manual');
     fs.mkdirSync(manualDir, { recursive: true });
     fs.writeFileSync(
@@ -128,7 +120,7 @@ test('G2: prune --force removes old FQDN tree, keeps manual', () => {
 });
 
 test('G3: skippedEmpty — no_export_symbol writes contract only, no handler/rule', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [
       makeRole({
         path: '/v1/orphan',
@@ -165,7 +157,7 @@ test('G3: skippedEmpty — no_export_symbol writes contract only, no handler/rul
 });
 
 test('contract schema includes stubId, upstreamId, hosts, canonicalHost', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const roles = [makeRole()];
     generateMocks({ projectSlug: slug, roles, force: true, merge: false });
 
@@ -183,7 +175,7 @@ test('contract schema includes stubId, upstreamId, hosts, canonicalHost', () => 
 });
 
 test('contract schema stamps fidelity (L1 for usage shape, L0 for empty)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const shapeRole = makeRole();
     const emptyRole = {
       ...makeRole(),
@@ -211,16 +203,13 @@ test('contract schema stamps fidelity (L1 for usage shape, L0 for empty)', () =>
   });
 });
 
-test('generate leaves projects/<slug> thin (no catalog dual-write)', () => {
-  withTempProject((slug) => {
+test('generate leaves no projects/ directory after catalog write', () => {
+  withTempServices((slug) => {
     generateMocks({ projectSlug: slug, roles: [makeRole()], force: true, merge: false });
-    const base = projectDataDir(slug);
-    assert.ok(fs.existsSync(path.join(base, 'index.json')));
-    for (const banned of ['mocks', 'contracts', 'proxy-rules.json', 'upstreams.json']) {
-      assert.ok(
-        !fs.existsSync(path.join(base, banned)),
-        `should not create projects/.../${banned}`,
-      );
-    }
+    assert.ok(!fs.existsSync(path.join(getDataRoot(), 'projects')));
+    const svcBase = serviceDataDir('svc-a');
+    assert.ok(fs.existsSync(path.join(svcBase, 'contracts')));
+    assert.ok(fs.existsSync(path.join(svcBase, 'mocks')));
+    assert.ok(fs.existsSync(path.join(svcBase, 'proxy-rules.json')));
   });
 });

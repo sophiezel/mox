@@ -1,6 +1,6 @@
 'use strict';
 
-const { resolveProjectSlug, parseStubId } = require('../lib/paths');
+const { resolveScanLabel, parseStubId } = require('../lib/paths');
 const { loadSession, saveSession } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
 
@@ -25,7 +25,7 @@ function assertStubId(apiId) {
 }
 
 function setCase(opts = {}) {
-  const projectSlug = resolveProjectSlug(
+  const label = resolveScanLabel(
     opts.projectDir || process.cwd(),
     opts.name,
   );
@@ -35,11 +35,11 @@ function setCase(opts = {}) {
     throw new Error('Usage: mox set-case <apiId> <caseId>');
   }
   assertStubId(apiId);
-  const cfg = loadSession(projectSlug);
+  const cfg = loadSession();
   const active = { ...(cfg.cases?.active || {}) };
   active[apiId] = caseId;
-  saveSession(projectSlug, { cases: { ...cfg.cases, active } });
-  appendAudit(projectSlug, {
+  saveSession({ cases: { ...cfg.cases, active } });
+  appendAudit(label, {
     command: 'set-case',
     taskId: opts.taskId || null,
     apiKey: apiId,

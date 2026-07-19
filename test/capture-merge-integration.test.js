@@ -5,26 +5,18 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const {
-  ensureProjectDirs,
   ensureServiceDirs,
-  projectDataDir,
   serviceDataDir,
   serviceContractPath,
   serviceStubHandlerPath,
 } = require('../lib/paths');
 const { captureMerge } = require('../scripts/capture-merge');
 const { renderHandler } = require('../scripts/generate-mock');
-const { writeProjectIndex } = require('../lib/catalog-merge');
+const { capturesDirFor } = require('../lib/catalog-merge');
 
 test('captureMerge: merges real body into contract + handler', () => {
-  const slug = `cap-merge-${Date.now()}`;
   const up = 'api';
-  ensureProjectDirs(slug);
   ensureServiceDirs(up);
-  writeProjectIndex(slug, {
-    stubs: ['GET api/v1/items'],
-    upstreams: [up],
-  });
   const urlPath = '/v1/items';
   const id = 'GET api/v1/items';
   const contract = {
@@ -54,7 +46,6 @@ test('captureMerge: merges real body into contract + handler', () => {
   fs.mkdirSync(path.dirname(handlerFile), { recursive: true });
   fs.writeFileSync(handlerFile, renderHandler(contract));
 
-  // upstreams for known host resolution
   fs.writeFileSync(
     path.join(serviceDataDir(up), 'upstreams.json'),
     `${JSON.stringify({
@@ -63,8 +54,7 @@ test('captureMerge: merges real body into contract + handler', () => {
     }, null, 2)}\n`,
   );
 
-  const capturesDir = path.join(projectDataDir(slug), 'captures');
-  fs.mkdirSync(capturesDir, { recursive: true });
+  const capturesDir = capturesDirFor(up);
   fs.writeFileSync(
     path.join(capturesDir, '1.json'),
     JSON.stringify({
@@ -76,32 +66,29 @@ test('captureMerge: merges real body into contract + handler', () => {
   );
 
   try {
-    const r = captureMerge(slug, { taskId: 't1' });
+    const r = captureMerge({ capturesDir, taskId: 't1' });
     assert.equal(r.merged, 1);
     const next = JSON.parse(fs.readFileSync(cPath, 'utf8'));
     assert.equal(next.cases[0].response.data.name, 'real-name');
     assert.equal(next.cases[0].response.data.extra, 1);
     assert.ok(!next.coverage.gaps.includes('no_property_access'));
   } finally {
-    fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
     fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
   }
 });
 
 test('captureMerge: empty responseBody is skipped with report', () => {
-  const slug = `cap-empty-${Date.now()}`;
-  ensureProjectDirs(slug);
-  const capturesDir = path.join(projectDataDir(slug), 'captures');
-  fs.mkdirSync(capturesDir, { recursive: true });
+  const up = 'cap-empty';
+  const capturesDir = capturesDirFor(up);
   fs.writeFileSync(
     path.join(capturesDir, 'empty.json'),
     JSON.stringify({ host: 'h', path: '/p', method: 'GET' }),
   );
   try {
-    const r = captureMerge(slug);
+    const r = captureMerge({ capturesDir });
     assert.equal(r.merged, 0);
     assert.ok(r.skipped?.length >= 1);
   } finally {
-    fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
+    fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
   }
 });

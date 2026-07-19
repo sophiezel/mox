@@ -112,8 +112,30 @@ test('collapse takes highest confidence within group', () => {
   assert.equal(out[0].confidence, 'high');
 });
 
-test('collapse groups by hostVar provenance even with different host labels', () => {
-  // Two hosts that normalize to DIFFERENT family tokens but share hostVar → merge
+test('collapse: shared hostVar with prefix-related labels merges via consensus', () => {
+  const apis = [
+    api({
+      host: 'svc-a.example.com',
+      path: '/v1/items',
+      hostVar: 'apiPrefix',
+    }),
+    api({
+      host: 'svc-a-brand-preview.example.com',
+      path: '/v1/items',
+      hostVar: 'apiPrefix',
+    }),
+  ];
+  const out = collapseByUpstream(apis);
+  assert.equal(out.length, 1, 'env-noise labels under same hostVar must merge');
+  assert.equal(out[0].upstreamId, 'svc-a');
+  assert.ok(!out[0].upstreamId.includes('apiPrefix'));
+  assert.deepEqual([...out[0].hosts].sort(), [
+    'svc-a-brand-preview.example.com',
+    'svc-a.example.com',
+  ]);
+});
+
+test('collapse: shared hostVar with true sibling fork splits by host label', () => {
   const apis = [
     api({
       host: 'one.example.com',
@@ -127,12 +149,11 @@ test('collapse groups by hostVar provenance even with different host labels', ()
     }),
   ];
   const out = collapseByUpstream(apis);
-  assert.equal(out.length, 1, 'shared hostVar must merge across families');
-  assert.equal(out[0].upstreamId, 'apiPrefix');
-  assert.deepEqual([...out[0].hosts].sort(), [
-    'one.example.com',
-    'two.example.com',
-  ]);
+  assert.equal(out.length, 2, 'true fork must not dump to _default or hostVar id');
+  const ids = out.map((s) => s.upstreamId).sort();
+  assert.deepEqual(ids, ['one', 'two']);
+  assert.ok(out.every((s) => s.upstreamId !== '_default'));
+  assert.ok(out.every((s) => s.upstreamId !== 'apiPrefix'));
 });
 
 test('collapse does not merge when hostVar differs', () => {

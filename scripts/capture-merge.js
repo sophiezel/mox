@@ -6,9 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  ensureProjectDirs,
   ensureServiceDirs,
-  projectDataDir,
   serviceDataDir,
   serviceContractPath,
   stubHandlerPath,
@@ -22,7 +20,6 @@ const { renderHandler, loadExistingContracts } = require('./generate-mock');
 const { isPlaceholderValue } = require('../lib/materialize');
 const { classifyFidelity } = require('../lib/gap-taxonomy');
 const { sanitizeCapture } = require('../lib/sanitize-capture');
-const { readProjectIndex } = require('../lib/catalog-merge');
 
 function deepMergeShape(target, sample) {
   if (sample == null) return target;
@@ -93,16 +90,10 @@ function mergeDataAdditive(existing, incoming) {
   return out;
 }
 
-/** Aggregate upstreams from service catalog (truth); legacy project file is fallback. */
-function loadUpstreams(projectSlug) {
+/** Aggregate upstreams from all services. */
+function loadUpstreams() {
   const merged = { version: 1, upstreams: {} };
-  const idx = readProjectIndex(projectSlug);
-  const ids =
-    idx?.upstreams?.length > 0
-      ? idx.upstreams.map((u) => sanitizeUpstreamId(u))
-      : listServiceIds();
-
-  for (const up of ids) {
+  for (const up of listServiceIds()) {
     const p = path.join(serviceDataDir(up), 'upstreams.json');
     if (!fs.existsSync(p)) continue;
     try {
@@ -112,22 +103,12 @@ function loadUpstreams(projectSlug) {
       /* ignore */
     }
   }
-
-  if (!Object.keys(merged.upstreams).length) {
-    const legacy = path.join(projectDataDir(projectSlug), 'upstreams.json');
-    if (fs.existsSync(legacy)) {
-      try {
-        return JSON.parse(fs.readFileSync(legacy, 'utf8'));
-      } catch {
-        /* ignore */
-      }
-    }
-  }
   return merged;
 }
 
-/** Persist host aliases into services/<upstreamId>/upstreams.json (catalog truth). */
-function saveUpstreams(_projectSlug, data) {
+/** Persist host aliases into services/<upstreamId>/upstreams.json. */
+function saveUpstreams(_ignored, data) {
+  const { assertHostsCompatible } = require('../lib/upstream');
   for (const [upId, info] of Object.entries(data.upstreams || {})) {
     const up = sanitizeUpstreamId(upId);
     ensureServiceDirs(up);
@@ -141,6 +122,10 @@ function saveUpstreams(_projectSlug, data) {
       }
     }
     existing.upstreams = existing.upstreams || {};
+    const prev = existing.upstreams[up];
+    if (prev?.hosts && info?.hosts) {
+      assertHostsCompatible(prev.hosts, info.hosts, { serviceId: up });
+    }
     existing.upstreams[up] = info;
     fs.writeFileSync(p, `${JSON.stringify(existing, null, 2)}\n`);
   }
@@ -154,22 +139,59 @@ function hostToUpstream(host, upstreams) {
   return null;
 }
 
-function captureMerge(projectSlug, opts = {}) {
-  ensureProjectDirs(projectSlug);
-  const capturesDir = opts.capturesDir || path.join(projectDataDir(projectSlug), 'captures');
-  if (!fs.existsSync(capturesDir)) {
-    console.log('[mox] no captures dir');
+/** List capture JSON files from services/{id}/captures and optional overrides. */
+function listCaptureFiles(opts = {}) {
+  /** @type {{ file: string, dir: string }[]} */
+  const out = [];
+  if (opts.capturesDir && fs.existsSync(opts.capturesDir)) {
+    for (const f of fs.readdirSync(opts.capturesDir)) {
+      if (f.endsWith('.json')) out.push({ file: f, dir: opts.capturesDir });
+    }
+    return out;
+  }
+  const { getDataRoot } = require('../lib/paths');
+  const root = path.join(getDataRoot(), 'services');
+  if (!fs.existsSync(root)) return out;
+  for (const up of fs.readdirSync(root)) {
+    const dir = path.join(root, up, 'captures');
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (f.endsWith('.json')) out.push({ file: f, dir });
+    }
+  }
+  return out;
+}
+
+function captureMerge(labelOrOpts, maybeOpts) {
+  const opts =
+    maybeOpts != null
+      ? maybeOpts
+      : labelOrOpts && typeof labelOrOpts === 'object' && !Array.isArray(labelOrOpts)
+        ? labelOrOpts
+        : {};
+  const label =
+    maybeOpts != null
+      ? labelOrOpts
+      : typeof labelOrOpts === 'string'
+        ? labelOrOpts
+        : 'default';
+
+  const { ensureDataDirs, reportsDir } = require('../lib/paths');
+  ensureDataDirs();
+
+  const captureFiles = listCaptureFiles(opts);
+  if (!captureFiles.length) {
+    console.log('[mox] no captures');
     return { merged: 0 };
   }
 
-  const contracts = loadExistingContracts(projectSlug);
-  const upstreamsData = loadUpstreams(projectSlug);
+  const contracts = loadExistingContracts();
+  const upstreamsData = loadUpstreams();
   let merged = 0;
   let anyLearnedHost = false;
   const skipped = [];
 
-  for (const f of fs.readdirSync(capturesDir)) {
-    if (!f.endsWith('.json')) continue;
+  for (const { file: f, dir: capturesDir } of captureFiles) {
     let cap;
     try {
       cap = JSON.parse(fs.readFileSync(path.join(capturesDir, f), 'utf8'));
@@ -195,18 +217,15 @@ function captureMerge(projectSlug, opts = {}) {
     const host = cap.host || '_default';
     const method = (cap.method || 'GET').toUpperCase();
 
-    // Prefer legacy FQDN-keyed contract when present (pre-service-catalog captures)
     const legacyKey = apiKey({ host, method, path: cap.path });
     let contract = contracts.get(legacyKey) || null;
 
-    // Resolve upstream from host
     let upstreamId = hostToUpstream(host, upstreamsData);
     let learnedHost = false;
 
     if (!contract && !upstreamId && host !== '_default') {
-      // Try to find a unique contract matching path+method
       const matches = [];
-      for (const [id, c] of contracts) {
+      for (const [, c] of contracts) {
         if (c.path === cap.path && (c.method || ['GET']).includes(method)) {
           matches.push(c);
         }
@@ -214,7 +233,6 @@ function captureMerge(projectSlug, opts = {}) {
       if (matches.length === 1) {
         upstreamId = matches[0].upstreamId || '_default';
         contract = matches[0];
-        // Learn the host into upstreams.json
         const up = upstreamsData.upstreams[upstreamId] || { hosts: [], canonicalHost: null };
         if (!up.hosts.includes(host)) {
           up.hosts.push(host);
@@ -244,7 +262,6 @@ function captureMerge(projectSlug, opts = {}) {
       continue;
     }
 
-    // Keep upstreamId aligned with contract when known
     if (!upstreamId) {
       upstreamId = contract.upstreamId || '_default';
     }
@@ -263,8 +280,6 @@ function captureMerge(projectSlug, opts = {}) {
         continue;
       }
     }
-    // Minimal PII / token sanitization before persisting real bodies.
-    // Defaults cover industry-standard sensitive keys; opts.sensitivePaths extends.
     if (opts.sanitize !== false) {
       const sanitized = sanitizeCapture(
         { responseBody: body, requestHeaders: cap.requestHeaders },
@@ -320,29 +335,15 @@ function captureMerge(projectSlug, opts = {}) {
     fs.mkdirSync(path.dirname(cPath), { recursive: true });
     fs.writeFileSync(cPath, `${JSON.stringify(contract, null, 2)}\n`);
 
-    const handlerFile = stubHandlerPath(
-      projectSlug,
-      up,
-      method,
-      contract.path,
-    );
+    const handlerFile = stubHandlerPath(null, up, method, contract.path);
     if (
       fs.existsSync(handlerFile) &&
       !fs.readFileSync(handlerFile, 'utf8').includes('mox:manual')
     ) {
       fs.writeFileSync(handlerFile, renderHandler(contract));
     }
-    // Legacy FQDN handler under projects/: update only if already present
-    const { mockHandlerPath } = require('../lib/paths');
-    const legacyHandler = mockHandlerPath(projectSlug, host, contract.path);
-    if (
-      fs.existsSync(legacyHandler) &&
-      !fs.readFileSync(legacyHandler, 'utf8').includes('mox:manual')
-    ) {
-      fs.writeFileSync(legacyHandler, renderHandler(contract));
-    }
 
-    appendAudit(projectSlug, {
+    appendAudit(label, {
       command: 'capture-merge',
       taskId: opts.taskId || null,
       apiKey: contract.id || id,
@@ -352,13 +353,12 @@ function captureMerge(projectSlug, opts = {}) {
   }
 
   if (anyLearnedHost) {
-    saveUpstreams(projectSlug, upstreamsData);
+    saveUpstreams(null, upstreamsData);
   }
 
   if (skipped.length) {
     const report = path.join(
-      projectDataDir(projectSlug),
-      'reports',
+      reportsDir(),
       `capture-merge-skipped-${Date.now()}.json`,
     );
     fs.writeFileSync(report, `${JSON.stringify({ skipped }, null, 2)}\n`);
@@ -373,7 +373,5 @@ function captureMerge(projectSlug, opts = {}) {
 module.exports = { captureMerge, mergeDataAdditive, deepMergeShape };
 
 if (require.main === module) {
-  const { resolveProjectSlug } = require('../lib/paths');
-  const slug = resolveProjectSlug(process.cwd(), process.argv[2]);
-  captureMerge(slug);
+  captureMerge({});
 }

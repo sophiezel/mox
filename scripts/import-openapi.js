@@ -13,9 +13,9 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  resolveProjectSlug,
-  ensureProjectDirs,
-  projectDataDir,
+  ensureDataDirs,
+  reportsDir,
+  resolveScanLabel,
   stubId: makeStubId,
 } = require('../lib/paths');
 const { appendAudit } = require('../lib/audit');
@@ -24,7 +24,7 @@ const { generateMocks } = require('./generate-mock');
 const { jsonSchemaToShape } = require('../lib/infer/shape-json-schema');
 const {
   normalizeHostLabel,
-  deriveUpstreamId,
+  resolveUpstreamId,
   pickCanonicalHost,
 } = require('../lib/upstream');
 
@@ -33,8 +33,6 @@ function schemaToShape(schema, components = {}) {
 }
 
 function parseSpec(raw) {
-  // Try JSON first, then YAML (js-yaml). YAML is an optional capability;
-  // if js-yaml is unavailable, fall back to a clear error.
   try {
     return JSON.parse(raw);
   } catch {
@@ -75,21 +73,20 @@ function importOpenApi(opts = {}) {
   const abs = path.resolve(opts.projectDir || process.cwd(), from);
   if (!fs.existsSync(abs)) throw new Error(`OpenAPI file not found: ${abs}`);
 
+  ensureDataDirs();
   const raw = fs.readFileSync(abs, 'utf8');
   const spec = parseSpec(raw);
 
   const projectDir = path.resolve(opts.projectDir || process.cwd());
-  const projectSlug = resolveProjectSlug(projectDir, opts.name);
-  ensureProjectDirs(projectSlug);
+  const scanLabel = resolveScanLabel(projectDir, opts.name);
   const taskId = opts.taskId || opts.task || null;
   const { host, basePath } = extractHost(spec);
   const components = spec.components || spec.definitions || {};
   const paths = spec.paths || {};
   const roles = [];
 
-  // Derive upstream identity from the spec host (same model as init).
   const upstreamId = host && host !== '_default'
-    ? (deriveUpstreamId({ hosts: [host] }) || normalizeHostLabel(host) || '_default')
+    ? (resolveUpstreamId({ hosts: [host] }) || normalizeHostLabel(host) || '_default')
     : '_default';
   const hosts = host && host !== '_default' ? [host] : [];
   const canonicalHost = hosts.length ? pickCanonicalHost(hosts, upstreamId) : null;
@@ -109,7 +106,6 @@ function importOpenApi(opts = {}) {
         success?.content?.['application/json']?.schema ||
         success?.schema ||
         null;
-      // unwrap envelope data if present
       const rawShape = schemaToShape(schema, components);
       const shape = rawShape.props?.data ? rawShape.props.data : rawShape;
       const sid = makeStubId({ upstreamId, method: method.toUpperCase(), path: fullPath });
@@ -156,10 +152,10 @@ function importOpenApi(opts = {}) {
     source: 'openapi',
     from: abs,
   };
-  writeClassifyResult(projectSlug, classified);
+  writeClassifyResult(scanLabel, classified);
 
   const gen = generateMocks({
-    projectSlug,
+    projectSlug: scanLabel,
     roles,
     conflicts: [],
     taskId,
@@ -167,21 +163,20 @@ function importOpenApi(opts = {}) {
     merge: !opts.force,
   });
 
-  appendAudit(projectSlug, {
+  appendAudit(scanLabel, {
     command: 'import-openapi',
     taskId,
     summary: `from=${from} roles=${roles.length} generated=${gen.generated}`,
   });
 
   const report = path.join(
-    projectDataDir(projectSlug),
-    'reports',
+    reportsDir(),
     `openapi-import-${Date.now()}.json`,
   );
   fs.writeFileSync(report, `${JSON.stringify({ roles: roles.length, gen }, null, 2)}\n`);
   console.log(`[mox] import-openapi roles=${roles.length} generated=${gen.generated}`);
   console.log(`[mox] report ${report}`);
-  return { roles, gen, projectSlug };
+  return { roles, gen, projectSlug: scanLabel };
 }
 
 module.exports = { importOpenApi, schemaToShape, extractHost, parseSpec };

@@ -169,7 +169,7 @@ test('materialize: empty array shape → []', () => {
 
 test('report hints: same exportHint across hosts de-dupes', () => {
   const { generateMocks } = require('../scripts/generate-mock');
-  const { projectDataDir } = require('../lib/paths');
+  const { serviceDataDir } = require('../lib/paths');
   const slug = `hint-dedupe-${Date.now()}`;
   const roles = [
     {
@@ -235,7 +235,9 @@ test('report hints: same exportHint across hosts de-dupes', () => {
     assert.equal(gen.usageBackedHints, 1);
     assert.equal(gen.emptyDataHints, 1);
   } finally {
-    const dir = projectDataDir(slug);
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    const { serviceDataDir } = require('../lib/paths');
+    if (fs.existsSync(serviceDataDir('svc-a'))) {
+      fs.rmSync(serviceDataDir('svc-a'), { recursive: true, force: true });
+    }
   }
 });

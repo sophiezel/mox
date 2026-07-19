@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Breaking
+- Service id 不再带 `prefix-` 元前缀；由 `resolveUpstreamId` / `consensusHostLabel` 推导（**host 族共识 → prefixKey**；**hostVar 永不进 id**）。同 ORIGIN 多环境合并为一个 catalog。本地请 `rm -rf .data/services && mox init --force`。
+- 同 service id 且 `hosts` 不相交时 generate 硬失败（禁止静默合并不同域名后端）。
+
 ### Changed
 - Product rename to **mox**: CLI / npm package / Agent Skill / env `MOX_*` / project config `.mox/` / handler markers `mox:manual` | `mox:store` (hard cut, no legacy aliases).
+- Docs: `docs/GLOSSARY.md`；用户可见主称 **service id**（字段仍名 `upstreamId`）。
 
 ### Added
 - Unified catalog resolve APIs in `lib/catalog-merge` (`loadContractsForCatalog`, `handlerExistsForContract`, `listMockKeysForCatalog`, `mocksRootFor`); smoke / list-empty / export-msw / generate read service truth, not project-only mocks

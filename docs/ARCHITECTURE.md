@@ -1,6 +1,6 @@
 # 架构与设计
 
-使用指南见根目录 [`README.md`](../README.md)。操作细节见 [`references/`](../references/)。已锁定决策见 [`DECISIONS.md`](./DECISIONS.md)。
+使用指南见根目录 [`README.md`](../README.md)。操作细节见 [`references/`](../references/)。已锁定决策见 [`DECISIONS.md`](./DECISIONS.md)。名词见 [`GLOSSARY.md`](./GLOSSARY.md)。
 
 ## 角色
 
@@ -32,20 +32,19 @@ LLM 介入边界（摘要；**真源**见 [`DECISIONS.md`](./DECISIONS.md) § LL
 .data/services/<upstreamId>/
   mocks/<METHOD>/<path>/index.js
   contracts/
+  captures/
   proxy-rules.json
   upstreams.json
   models.json
-.data/projects/<slug>/index.json   ← 该前端发现的 stub / upstream 索引
 ```
 
-- `upstreamId`：逻辑服务标识（来自 `hostVar` / `prefixKey` / 归一化 host label），不含 FQDN。
+- `upstreamId`（= **service id**）：逻辑服务标识，目录名 `.data/services/<id>/`；由 `resolveUpstreamId` 从 **host 族共识** / `prefixKey` 推导（**忽略 hostVar**；**无** `prefix-` 元前缀），不含 FQDN。同 ORIGIN 多环境 → 一个 catalog + 全量 `hosts[]`。详见 [GLOSSARY](./GLOSSARY.md)。
 - `hosts[]`：该服务所有环境域名；proxy 命中任一即路由到同一 stub。条目可含 `host:port`。
 - `stubId`：全链路统一身份（infer → classify → contract → proxy-rules → runtime → set-case → capture → smoke → audit → openapi → export-msw）。
 - 代理零侵入：客户端仍打真实域名，proxy 命中后注入 `x-mock-stub-id` 路由到 mock handler。
-- Catalog 可全量生成；**运行时是否 mock** 由 `trafficMode` 决定（见下）。
-- 同 `upstreamId` 可被多前端共享；Virtual Service 的 Store 按 upstream 作用域。
-
-通用性：引擎不含业务仓硬编码、不依赖特定公司域名。
+- Catalog 可全量生成；**运行时是否 mock** 由 `trafficMode` / `--rules` 决定（见下）。
+- 同 `upstreamId` 可被多前端扫描共享；Virtual Service 的 Store 按 upstream 作用域。
+- 前端目录 = `init` 扫描输入，**不是** `.data` 一级命名空间。
 
 ## 流量策略
 
@@ -94,29 +93,32 @@ Shape 通道（有界静态推断，见 [`references/infer-from-usage.md`](../re
 ## 数据目录
 
 ```
-rules/                         共享 rule 包（可 git；不绑 project）
+rules/                         共享 rule 包（可 git；stub 级标签）
 .data/
   session.json                 全局运行时：端口 / trafficMode / allowlist / cases / activeCatalogs
   runtime.json                 当前进程状态
   service-journal.json         Virtual Service 命中日志（跨进程 stop 摘要）
-  chrome-profiles/<slug>/      仅 autoLaunch Chrome 时创建
-  services/<upstreamId>/       Service Catalog（真源）
+  classify/                    最近一次扫描 request-roles.json
+  reports/                     init / smoke / openapi 报告
+  audit/                       changelog.jsonl + proxy-access.jsonl
+  scenarios/                   全局 scenario 文件
+  exports/                     export-msw 等
+  mitm/                        可选 HTTPS MITM CA
+  chrome-profiles/<label>/     仅 autoLaunch Chrome 时创建
+  services/<upstreamId>/       Service Catalog（唯一真源）
     mocks/<METHOD>/<path>/index.js
     contracts/
+    captures/
     proxy-rules.json
     upstreams.json
     models.json                虚拟实体（可选）
     domain-draft.md            init/generate 静默草稿（高级可重跑）
-  projects/<projectSlug>/      前端发现索引 + 项目侧产物
-    index.json                 stubs[] / upstreams[]
-    classify/ captures/ reports/ audit/ scenarios/ exports/
-    # 不再写入: mocks/ contracts/ proxy-rules.json upstreams.json（真源在 services/）
 ```
 
-- **一个** proxy + mock 进程；`start --name=a --name=b` 按 project 索引展开到 services。
-- 同一 `upstreamId` 被多前端发现时 **共享** `.data/services/<upstreamId>/`。
+- **一个** proxy + mock 进程；`start --name=<upstreamId…>` 挂载指定 services；省略 = 全部。
+- 同一 `upstreamId` 被多次 init（不同前端目录）发现时 **共享** `.data/services/<upstreamId>/`。
 - stubId 跨不同服务冲突 → 启动失败（不静默覆盖）。
 - `--task` 只做需求溯源，**不**拆分 mock 目录。
 - 单测默认写入临时 `MOX_DATA_ROOT`，不污染本仓 `.data`。
-- 读 contracts/handlers：**统一** `lib/catalog-merge`（`loadContractsForCatalog` / `handlerExistsForContract`）；禁止各脚本私自只扫 `projects/*/mocks`。
+- 读 contracts/handlers：**统一** `lib/catalog-merge`；禁止各脚本假设已废除的 `projects/*`。
 - 后台 session：`mox start --detach`（子进程保活）；前台默认忽略 SIGHUP，用 `stop` / SIGTERM 结束。

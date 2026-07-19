@@ -2,7 +2,7 @@
 
 /**
  * Preload for `npm test`: redirect all .data writes to a temp dir so the
- * repo `.data/services` / `.data/projects` are never filled with test junk.
+ * repo `.data/services` and global ops dirs are never filled with test junk.
  * Individual tests may still override MOX_DATA_ROOT.
  */
 

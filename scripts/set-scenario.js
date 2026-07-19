@@ -1,22 +1,22 @@
 'use strict';
 
-const { resolveProjectSlug } = require('../lib/paths');
+const { resolveScanLabel } = require('../lib/paths');
 const { loadSession, saveSession } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
 const { loadScenario, listScenarios } = require('../lib/scenario');
 
 function setScenario(opts = {}) {
-  const projectSlug = resolveProjectSlug(
+  const label = resolveScanLabel(
     opts.projectDir || process.cwd(),
     opts.name,
   );
   const name = opts.scenario;
   if (!name) {
-    const avail = listScenarios(projectSlug);
+    const avail = listScenarios();
     throw new Error(`Usage: mox set-scenario <name>. Available: ${avail.join(', ') || '(none)'}`);
   }
-  const scenario = loadScenario(projectSlug, name);
-  const cfg = loadSession(projectSlug);
+  const scenario = loadScenario(name);
+  const cfg = loadSession();
   const active = { ...(cfg.cases?.active || {}) };
   if (scenario.apis && typeof scenario.apis === 'object') {
     for (const [apiId, caseId] of Object.entries(scenario.apis)) {
@@ -32,12 +32,12 @@ function setScenario(opts = {}) {
           transitions: scenario.transitions || null,
         }
       : null;
-  saveSession(projectSlug, {
+  saveSession({
     scenario: name,
     cases: { active, default: defaultCase },
     stateful,
   });
-  appendAudit(projectSlug, {
+  appendAudit(label, {
     command: 'set-scenario',
     taskId: opts.taskId || null,
     summary: `scenario=${name} default=${defaultCase} apis=${Object.keys(scenario.apis || {}).length}`,

@@ -78,8 +78,8 @@ disable-model-invocation: true
 ```bash
 bash scripts/install.sh
 cd <frontend> && mox init [--task=ID] [--related-from=doc]
-mox start --name=<slug> [--task=ID] [--start-url=http://localhost:8080]
-# 后台: mox start --name=<slug> --detach
+mox start [--name=<upstreamId…>] [--rules kw…] [--task=ID] [--start-url=http://localhost:8080]
+# 后台: mox start --detach
 mox scenario e2e-fault && mox merge
 mox stop
 # HTTPS 改写（可选）: start --mitm=1 （须信任打印的 CA）

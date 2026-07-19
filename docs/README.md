@@ -5,6 +5,7 @@
 | 读什么 | 文档 |
 |--------|------|
 | 安装 / 快速开始 / 命令 | 根目录 [`README.md`](../README.md) |
+| **名词解释** | [`GLOSSARY.md`](./GLOSSARY.md) |
 | L0→L6 跟做 | [`references/learning-path.md`](../references/learning-path.md) |
 | 架构（Stub Catalog / 流量 / VB / 保真度） | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
 | **已锁定决策（真源）** | [`DECISIONS.md`](./DECISIONS.md) |

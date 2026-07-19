@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const {
-  ensureProjectDirs,
-  projectDataDir,
+  ensureDataDirs,
+  serviceDataDir,
   getGlobalSessionPath,
 } = require('../lib/paths');
 const {
@@ -49,10 +49,12 @@ function withIsolatedSession(fn) {
   }
 }
 
-function writeCatalog(slug, rules) {
-  ensureProjectDirs(slug);
+function writeServiceRules(upstreamId, rules) {
+  ensureDataDirs();
+  const base = serviceDataDir(upstreamId);
+  fs.mkdirSync(base, { recursive: true });
   fs.writeFileSync(
-    path.join(projectDataDir(slug), 'proxy-rules.json'),
+    path.join(base, 'proxy-rules.json'),
     `${JSON.stringify(rules, null, 2)}\n`,
   );
 }
@@ -91,9 +93,9 @@ test('global session save/load ignores project path', () => {
 });
 
 test('mergeCatalogs unions rules and fails on stubId conflict', () => {
-  const a = `cat-a-${Date.now()}`;
-  const b = `cat-b-${Date.now()}`;
-  writeCatalog(a, [
+  const a = `up-a-${Date.now()}`;
+  const b = `up-b-${Date.now()}`;
+  writeServiceRules(a, [
     {
       stubId: 'GET up-a/v1/x',
       upstreamId: 'up-a',
@@ -102,7 +104,7 @@ test('mergeCatalogs unions rules and fails on stubId conflict', () => {
       methods: ['GET'],
     },
   ]);
-  writeCatalog(b, [
+  writeServiceRules(b, [
     {
       stubId: 'GET up-b/v1/y',
       upstreamId: 'up-b',
@@ -116,7 +118,7 @@ test('mergeCatalogs unions rules and fails on stubId conflict', () => {
   assert.equal(ok.stubToCatalog['GET up-a/v1/x'], a);
   assert.equal(ok.stubToCatalog['GET up-b/v1/y'], b);
 
-  writeCatalog(b, [
+  writeServiceRules(b, [
     {
       stubId: 'GET up-a/v1/x',
       upstreamId: 'up-a',
@@ -127,8 +129,8 @@ test('mergeCatalogs unions rules and fails on stubId conflict', () => {
   ]);
   assert.throws(() => mergeCatalogs([a, b]), /stubId conflict/);
 
-  fs.rmSync(projectDataDir(a), { recursive: true, force: true });
-  fs.rmSync(projectDataDir(b), { recursive: true, force: true });
+  fs.rmSync(serviceDataDir(a), { recursive: true, force: true });
+  fs.rmSync(serviceDataDir(b), { recursive: true, force: true });
 });
 
 test('rules keyword resolve + multi merge + apply selective', () => {
@@ -175,6 +177,6 @@ test('resolveActiveCatalogs requires existing proxy-rules', () => {
   const missing = `missing-${Date.now()}`;
   assert.throws(
     () => resolveActiveCatalogs({ names: missing }),
-    /catalog not found/,
+    /service not found/,
   );
 });

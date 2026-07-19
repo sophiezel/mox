@@ -3,9 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  resolveProjectSlug,
-  ensureProjectDirs,
-  projectDataDir,
+  resolveScanLabel,
+  ensureDataDirs,
+  reportsDir,
 } = require('../lib/paths');
 const { appendAudit } = require('../lib/audit');
 const { buildInitReport } = require('../lib/init-report');
@@ -31,12 +31,12 @@ async function initProject(opts = {}) {
     throw new Error(`projectDir not found: ${projectDir}`);
   }
 
-  const projectSlug = resolveProjectSlug(projectDir, nameOverride);
-  ensureProjectDirs(projectSlug);
-  const copiedScenarios = copyBuiltinScenarios(projectSlug);
+  const scanLabel = resolveScanLabel(projectDir, nameOverride);
+  ensureDataDirs();
+  const copiedScenarios = copyBuiltinScenarios();
 
-  console.log(`[mox] init projectDir=${projectDir}`);
-  console.log(`[mox] projectSlug=${projectSlug} taskId=${taskId || 'adhoc'}`);
+  console.log(`[mox] init scanDir=${projectDir}`);
+  console.log(`[mox] label=${scanLabel} taskId=${taskId || 'adhoc'}`);
 
   const apis = inferApiUsage(projectDir, {
     withUsageIo: true,
@@ -44,7 +44,6 @@ async function initProject(opts = {}) {
     forceRefresh: Boolean(opts.force),
   });
   const meta = apis.meta || {};
-  // apis is array with meta property
   const apiList = Array.isArray(apis) ? apis : [];
   console.log(`[mox] discovered ${apiList.length} APIs`);
   if (meta.gatewayFilteredCount) {
@@ -53,8 +52,9 @@ async function initProject(opts = {}) {
     );
   }
 
-  const existingContracts = loadExistingContracts(projectSlug);
-  const existingMockKeys = listExistingMockKeys(projectSlug);
+  // Load existing catalog across all services
+  const existingContracts = loadExistingContracts();
+  const existingMockKeys = listExistingMockKeys();
 
   const classified = classifyRequests({
     apis: apiList,
@@ -66,14 +66,12 @@ async function initProject(opts = {}) {
     existingContracts,
   });
 
-  // Carry enrichment fields from apis onto roles (keyed by stubId)
   const apiByKey = new Map();
   for (const a of apiList) {
     const sid =
       a.stubId ||
       `${(a.method || 'GET').toUpperCase()} ${(a.upstreamId || a.host || '_default')}${a.path}`;
     apiByKey.set(sid, a);
-    // legacy FQDN key for transitional lookup
     apiByKey.set(
       `${(a.method || 'GET').toUpperCase()} ${a.host || '_default'}${a.path}`,
       a,
@@ -101,7 +99,7 @@ async function initProject(opts = {}) {
     };
   });
 
-  writeClassifyResult(projectSlug, classified);
+  writeClassifyResult(null, classified);
 
   const roles = classified.roles.map((r) => {
     if (!taskId) return { ...r, blocked: false };
@@ -111,7 +109,7 @@ async function initProject(opts = {}) {
   });
 
   const gen = generateMocks({
-    projectSlug,
+    projectSlug: scanLabel,
     roles,
     conflicts: classified.conflicts,
     taskId,
@@ -124,15 +122,15 @@ async function initProject(opts = {}) {
   const reportName = taskId
     ? `init-${taskId}-${stamp}.md`
     : `init-${stamp}.md`;
-  const reportPath = path.join(
-    projectDataDir(projectSlug),
-    'reports',
-    reportName,
-  );
+  const reportPath = path.join(reportsDir(), reportName);
 
   const { md, summary } = buildInitReport({
-    apiList, gen, roles,
-    projectDir, projectSlug, taskId,
+    apiList,
+    gen,
+    roles,
+    projectDir,
+    projectSlug: scanLabel,
+    taskId,
     existingContracts,
   });
   const {
@@ -144,11 +142,11 @@ async function initProject(opts = {}) {
 
   fs.writeFileSync(reportPath, md);
   fs.writeFileSync(
-    path.join(projectDataDir(projectSlug), 'reports', 'coverage-summary.json'),
+    path.join(reportsDir(), 'coverage-summary.json'),
     `${JSON.stringify(summary, null, 2)}\n`,
   );
 
-  appendAudit(projectSlug, {
+  appendAudit(scanLabel, {
     command: 'init',
     taskId,
     summary: `discovered=${apiList.length} generated=${gen.generated} usageBacked=${gen.usageBackedCount} empty=${gen.emptyDataCount} TRACE_EMPTY=${gen.traceEmptyCount || 0} capturePreserved=${gen.capturePreservedCount || 0} fidelity=L0:${summary.fidelity.L0}/L1:${summary.fidelity.L1}/L2:${summary.fidelity.L2}/L3:${summary.fidelity.L3}`,
@@ -172,7 +170,7 @@ async function initProject(opts = {}) {
   }
 
   return {
-    projectSlug,
+    projectSlug: scanLabel,
     projectDir,
     apis: apiList,
     roles,

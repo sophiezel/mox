@@ -4,17 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { projectDataDir, serviceDataDir, stubHandlerPath, serviceContractPath } = require('../lib/paths');
+const { serviceDataDir, stubHandlerPath, serviceContractPath } = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
 
-function withTempProject(fn) {
-  const slug = `dead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
+function withTempServices(fn) {
+  const label = `dead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
-    return fn(slug);
+    return fn(label);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
     try {
       fs.rmSync(serviceDataDir('dead-svc'), { recursive: true, force: true });
     } catch {
@@ -46,7 +43,7 @@ function makeRole(overrides = {}) {
 }
 
 test('P3-D1: empty + no_callsite → contract-only (no handler, no proxy rule)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const role = makeRole({
       coverage: {
         request: { keysFound: [], confidence: 'low' },
@@ -77,7 +74,7 @@ test('P3-D1: empty + no_callsite → contract-only (no handler, no proxy rule)',
 });
 
 test('P3-D2: empty + no_export_symbol → contract-only (existing behavior preserved)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const role = makeRole({
       coverage: {
         request: {}, response: {}, enums: [],
@@ -95,7 +92,7 @@ test('P3-D2: empty + no_export_symbol → contract-only (existing behavior prese
 });
 
 test('P3-D3: empty + TRACE_EMPTY (callsite exists) → still renders handler (not contract-only)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const role = makeRole({
       coverage: {
         request: { keysFound: [], confidence: 'low' },
@@ -120,7 +117,7 @@ test('P3-D3: empty + TRACE_EMPTY (callsite exists) → still renders handler (no
 });
 
 test('P3-D4: empty + no_callsite + TRACE_EMPTY → contract-only (no_callsite dominates; dead export)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     // Both gaps: no_callsite wins — it's a dead export regardless of trace state
     const role = makeRole({
       coverage: {
@@ -138,7 +135,7 @@ test('P3-D4: empty + no_callsite + TRACE_EMPTY → contract-only (no_callsite do
 });
 
 test('P3-D5: non-empty shape + no_callsite → still renders handler (shape exists, not dead)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const role = makeRole({
       responseShape: { type: 'object', props: { id: { type: 'string' } } },
       coverage: {
@@ -157,7 +154,7 @@ test('P3-D5: non-empty shape + no_callsite → still renders handler (shape exis
 });
 
 test('P3-D6: deadExports reported in init coverage-summary.json', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     const role = makeRole({
       stubId: 'GET dead-svc/v1/dead',
       path: '/v1/dead',

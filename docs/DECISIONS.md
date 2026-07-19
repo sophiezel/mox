@@ -23,15 +23,17 @@
 | 项 | 定稿 |
 |----|------|
 | 运行时 | **全局** `.data/session.json` + `.data/runtime.json`（单 mock 服务） |
-| **Service Catalog（真源）** | `.data/services/<upstreamId>/`（mocks / contracts / proxy-rules / upstreams / models） |
-| **Project 索引** | `.data/projects/<projectSlug>/`：`index.json`（发现到的 stub 列表）+ classify / captures / reports / audit / scenarios（**不含** mocks/contracts 真源；不再双写聚合 proxy-rules / upstreams） |
-| Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOX_RULES_DIR`）；跨 project 共享 |
-| 多 catalog | `start --name=a --name=b` 按 **project 索引**展开到 services 合并挂载；省略 `--name` = 全部有 proxy-rules 的 **services**（磁盘上残留的 legacy project proxy-rules 仍可读，generate 不再写入） |
-| 否决 | 默认「每 project 一份运行时 session / 各起一个代理」；否决「mocks 真源长期挂在 frontend project 下」 |
+| **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
+| **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
+| 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
+| Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOX_RULES_DIR`）；stub 级「标签」用 `--rules`，不是 projects/ |
+| 多 catalog | `start --name=<serviceId…>` 挂载指定 services；省略 `--name` = 全部有 proxy-rules 的 **services** |
+| service id 冲突 | 同 id 且 `hosts` 不相交 → generate **硬失败**（同 path 不同域名不得静默合并）；无 host、仅相同 prefixKey 时无法自动拆分（见 GLOSSARY 残留限制） |
+| 否决 | 默认「每 frontend 一份运行时 session / 各起一个代理」；否决「mocks 真源挂在 frontend 名下」 |
 | 无 `_project/`、无按 task 拆分的 mock 层 | 已否决 |
 | `--task` | 仅审计/溯源（`lastTaskId`、`audit/changelog.jsonl`、契约 history），不分区存储 |
-| Chrome profile | `.data/chrome-profiles/<primaryCatalog>/`（**仅 autoLaunch Chrome 时创建**；`ensureProjectDirs` 不再预建） |
-| `.data` | gitignore；**单测经 `test/_isolate-data-root.cjs` 写入临时目录**，不污染仓库 `.data/services` / `projects` |
+| Chrome profile | `.data/chrome-profiles/<label>/`（**仅 autoLaunch Chrome 时创建**） |
+| `.data` | gitignore；**单测经 `test/_isolate-data-root.cjs` 写入临时目录**，不污染仓库 `.data/services` |
 
 ## Virtual Backend（Stub Catalog → 服务层）
 
@@ -43,9 +45,9 @@
 | CRUD | 仅对确定性识别的 resource cluster 在 `init`/`generate` **自动**绑 Store；非 CRUD 保持 static cases 或 scenario FSM |
 | 域模型草稿 | `init`/`generate` **静默**写 `models.json` / `domain-draft.md`；高级 `domain-draft` / `materialize-service` 仅用于重绑与排障；表结构 = 虚拟实体 schema，不连真库 |
 | Journal | 命中 Virtual Service 时记入内存并落盘 `.data/service-journal.json`；**`stop` / Ctrl+C 打印一行摘要**；明细用 `service journal` |
-| Catalog 解析真源 | **统一**走 `lib/catalog-merge`：`loadContractsForCatalog` / `handlerExistsForContract` / `listMockKeysForCatalog` / `mocksRootFor`；smoke、list-empty、export-msw、classify/generate 不得再各自假设 `projects/*/mocks` |
+| Catalog 解析真源 | **统一**走 `lib/catalog-merge`：`loadContractsForCatalog` / `loadContractsAcross` / `handlerExistsForContract` / `listMockKeysForCatalog` / `mocksRootFor`；smoke、list-empty、export-msw、classify/generate 只认 `services/*` |
 | `start --detach` | 父进程 spawn 独立子进程（`detached`），写 `runtime.json` pid；父进程退出后 session 仍存活；结束用 `mox stop` |
-| 全链 E2E | 通用 `scripts/run-project-e2e.js`（`FRONTEND_DIR` + `MOCK_NAME`）；产品码禁止公司路径/域名硬编码 |
+| 全链 E2E | 通用 `scripts/run-project-e2e.js`（`FRONTEND_DIR`）；产品码禁止公司路径/域名硬编码 |
 | 保真度 L3 | store 或 scenario 生效且可 reset |
 
 ## Classify
@@ -88,7 +90,7 @@ Classify 是否需要 LLM/人：仅当有 `--task` / `--related-from` / 明确�
 
 Contract 扩展：`httpStatus` + `meta.{delayMs,fault}`。Router 去掉写死延迟；handler 返回描述符或纯 JSON（兼容）。
 
-Scenario 文件 `.data/projects/<slug>/scenarios/<name>.json`：`{ default, apis }`；`set-scenario` 批量切；proxy **每请求 ≤1s 缓存**读 session active map。
+Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scenario` 批量切；proxy **每请求 ≤1s 缓存**读 session active map。
 
 内置模板：`assets/scenarios/e2e-happy|e2e-fault|e2e-slow.json`。
 
@@ -100,10 +102,10 @@ Scenario 文件 `.data/projects/<slug>/scenarios/<name>.json`：`{ default, apis
 | 真机 | 设备 Wi‑Fi 手动代理 → `proxyPort`（同 Whistle）；业务代码零改 |
 | proxy 绑定 | 桌面-only 可 `127.0.0.1`；真机/E2E 场景须 `0.0.0.0`，启动日志打印 **LAN IP:port** 供手机填写 |
 | LAN 安全 | **仅信任局域网，勿在公共 Wi‑Fi 开 0.0.0.0** |
-| mock 命中 | `.data/services/<upstreamId>/mocks/<METHOD>/<path>/index.js`（legacy project mocks 仍可读） |
-| miss | soft：透传 + capture，不因单接口拖垮 session |
+| mock 命中 | `.data/services/<upstreamId>/mocks/<METHOD>/<path>/index.js` |
+| miss | soft：透传 + capture 写入 `services/<up>/captures/`，不因单接口拖垮 session |
 | CORS | 默认 localhost Origin；OPTIONS → 204；Hybrid WebView 非 localhost Origin 走 `cors.extraOrigins`（不实现「万能 Origin」） |
-| HTTPS | 默认 CONNECT 隧道透传；可选 `--mitm=1` 对命中 rules 的 host 做本地 CA MITM（须信任 CA） |
+| HTTPS | 默认 CONNECT 隧道透传；可选 `--mitm=1` 对命中 rules 的 host 做本地 CA MITM（须信任 CA；CA 在 `.data/mitm/`） |
 | E2E scenario 隔离 | 一 worker 一 session，或用例 `beforeEach`/`afterEach` `set-scenario` 复位；不建分布式锁 |
 
 ## LLM 介入边界

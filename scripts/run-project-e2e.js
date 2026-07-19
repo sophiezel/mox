@@ -5,15 +5,16 @@
  *   init → start --detach → scenario/smoke → stop
  *
  * Usage:
- *   FRONTEND_DIR=/path/to/app MOCK_NAME=myapp \
+ *   FRONTEND_DIR=/path/to/app \
  *     node scripts/run-project-e2e.js [--skip-init]
  *
  * Env:
  *   FRONTEND_DIR  (required) — frontend repo cwd for init/start
- *   MOCK_NAME     (default: basename of FRONTEND_DIR)
- *   MOCK_TASK     (default: <name>-e2e)
+ *   MOCK_TASK     (default: <basename>-e2e)
  *   MOCK_PORT     (default: 3900)
  *   PROXY_PORT    (default: 18999)
+ *
+ * --name is upstreamId only; this script mounts all services after init.
  */
 
 const path = require('path');
@@ -33,8 +34,8 @@ if (!FRONTEND_DIR) {
   process.exit(2);
 }
 
-const SLUG = process.env.MOCK_NAME || path.basename(path.resolve(FRONTEND_DIR));
-const TASK = process.env.MOCK_TASK || `${SLUG}-e2e`;
+const LABEL = path.basename(path.resolve(FRONTEND_DIR));
+const TASK = process.env.MOCK_TASK || `${LABEL}-e2e`;
 const MOCK_PORT = Number(process.env.MOCK_PORT || 3900);
 const PROXY_PORT = Number(process.env.PROXY_PORT || 18999);
 
@@ -80,7 +81,7 @@ function parseSmokeSummary(stdout) {
 }
 
 async function main() {
-  spawnSync(process.execPath, [BIN, 'stop', `--name=${SLUG}`], {
+  spawnSync(process.execPath, [BIN, 'stop'], {
     cwd: FRONTEND_DIR,
     encoding: 'utf8',
     env: process.env,
@@ -88,13 +89,12 @@ async function main() {
 
   if (!skipInit) {
     console.log('[project-e2e] init…');
-    run(['init', `--name=${SLUG}`, `--task=${TASK}`, '--force']);
+    run(['init', `--task=${TASK}`, '--force']);
   }
 
   console.log('[project-e2e] start --detach…');
   run([
     'start',
-    `--name=${SLUG}`,
     `--task=${TASK}`,
     '--detach',
     `--mock-port=${MOCK_PORT}`,
@@ -103,12 +103,11 @@ async function main() {
 
   const summary = { happy: null, fault: null, proxy: null, ok: true };
   try {
-    run(['scenario', 'e2e-happy', `--name=${SLUG}`]);
+    run(['scenario', 'e2e-happy']);
     await new Promise((r) => setTimeout(r, 1100));
     console.log('[project-e2e] smoke success…');
     const happyOut = run([
       'smoke',
-      `--name=${SLUG}`,
       '--ci',
       '--cases=success',
       `--task=${TASK}`,
@@ -116,12 +115,11 @@ async function main() {
     summary.happy = parseSmokeSummary(happyOut.stdout || '');
     if (summary.happy.failed) summary.ok = false;
 
-    run(['scenario', 'e2e-fault', `--name=${SLUG}`]);
+    run(['scenario', 'e2e-fault']);
     await new Promise((r) => setTimeout(r, 1100));
     console.log('[project-e2e] smoke http_500…');
     const faultOut = run([
       'smoke',
-      `--name=${SLUG}`,
       '--ci',
       '--cases=http_500',
       `--task=${TASK}`,
@@ -130,7 +128,9 @@ async function main() {
     if (summary.fault.failed) summary.ok = false;
 
     const { mergeCatalogs } = require('../lib/catalog-merge');
-    const rules = mergeCatalogs([SLUG]).rules;
+    const { listServiceIds } = require('../lib/paths');
+    const services = listServiceIds();
+    const rules = services.length ? mergeCatalogs(services).rules : [];
     const rule =
       rules.find((x) => (x.methods || []).map(String).includes('GET')) ||
       rules[0];
@@ -156,18 +156,16 @@ async function main() {
     }
   } finally {
     console.log('[project-e2e] stop…');
-    spawnSync(process.execPath, [BIN, 'stop', `--name=${SLUG}`], {
+    spawnSync(process.execPath, [BIN, 'stop'], {
       cwd: FRONTEND_DIR,
       encoding: 'utf8',
       env: process.env,
     });
   }
 
-  const out = path.join(
-    require('../lib/paths').projectDataDir(SLUG),
-    'reports',
-    `project-e2e-${Date.now()}.json`,
-  );
+  const { reportsDir, ensureDataDirs } = require('../lib/paths');
+  ensureDataDirs();
+  const out = path.join(reportsDir(), `project-e2e-${Date.now()}.json`);
   fs.writeFileSync(out, `${JSON.stringify(summary, null, 2)}\n`);
   console.log('[project-e2e] summary', JSON.stringify(summary, null, 2));
   console.log('[project-e2e] wrote', out);

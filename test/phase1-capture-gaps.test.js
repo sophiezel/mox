@@ -4,18 +4,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { projectDataDir, stubHandlerPath, serviceDataDir, serviceContractPath } = require('../lib/paths');
+const { serviceDataDir, stubHandlerPath, serviceContractPath } = require('../lib/paths');
 const { generateMocks } = require('../scripts/generate-mock');
+const { capturesDirFor } = require('../lib/catalog-merge');
 
-function withTempProject(fn) {
-  const slug = `cap-gap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const root = projectDataDir(slug);
-  fs.mkdirSync(path.join(root, 'audit'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'captures'), { recursive: true });
+function withTempServices(fn) {
+  const label = `cap-gap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
-    return fn(slug);
+    return fn(label);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
     try {
       fs.rmSync(serviceDataDir('svc-a'), { recursive: true, force: true });
     } catch {
@@ -47,14 +44,14 @@ function makeEmptyRole(overrides = {}) {
 }
 
 test('P1-C1: capture-merge clears TRACE_EMPTY + no_property_access after successful merge', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole()],
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -80,14 +77,14 @@ test('P1-C1: capture-merge clears TRACE_EMPTY + no_property_access after success
 });
 
 test('P1-C2: capture-merge clears no_callsite when real data arrives (export now has evidence of use)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole()],
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -99,7 +96,7 @@ test('P1-C2: capture-merge clears no_callsite when real data arrives (export now
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    captureMerge(slug, { capturesDir });
+    captureMerge({ capturesDir });
 
     const contract = JSON.parse(
       fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
@@ -112,7 +109,7 @@ test('P1-C2: capture-merge clears no_callsite when real data arrives (export now
 });
 
 test('P1-C3: capture-merge preserves bind_ambiguous and dynamic_key (capture does not fix binding/dynamic)', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole({
@@ -126,7 +123,7 @@ test('P1-C3: capture-merge preserves bind_ambiguous and dynamic_key (capture doe
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -138,7 +135,7 @@ test('P1-C3: capture-merge preserves bind_ambiguous and dynamic_key (capture doe
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    captureMerge(slug, { capturesDir });
+    captureMerge({ capturesDir });
 
     const contract = JSON.parse(
       fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
@@ -151,14 +148,14 @@ test('P1-C3: capture-merge preserves bind_ambiguous and dynamic_key (capture doe
 });
 
 test('P1-C4: capture-merge stamps fidelity=L2 after successful merge', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole()],
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -170,7 +167,7 @@ test('P1-C4: capture-merge stamps fidelity=L2 after successful merge', () => {
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    captureMerge(slug, { capturesDir });
+    captureMerge({ capturesDir });
 
     const contract = JSON.parse(
       fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
@@ -180,14 +177,14 @@ test('P1-C4: capture-merge stamps fidelity=L2 after successful merge', () => {
 });
 
 test('P1-C5: capture-merge sanitizes token/password fields in persisted data', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole()],
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -199,7 +196,7 @@ test('P1-C5: capture-merge sanitizes token/password fields in persisted data', (
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    captureMerge(slug, { capturesDir });
+    captureMerge({ capturesDir });
 
     const contract = JSON.parse(
       fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),
@@ -213,14 +210,14 @@ test('P1-C5: capture-merge sanitizes token/password fields in persisted data', (
 });
 
 test('P1-C6: capture-merge --no-sanitize opts disables sanitization', () => {
-  withTempProject((slug) => {
+  withTempServices((slug) => {
     generateMocks({
       projectSlug: slug,
       roles: [makeEmptyRole()],
       force: true, merge: false,
     });
 
-    const capturesDir = path.join(projectDataDir(slug), 'captures');
+    const capturesDir = capturesDirFor('svc-a');
     fs.writeFileSync(
       path.join(capturesDir, 'cap.json'),
       JSON.stringify({
@@ -232,7 +229,7 @@ test('P1-C6: capture-merge --no-sanitize opts disables sanitization', () => {
     );
 
     const { captureMerge } = require('../scripts/capture-merge');
-    captureMerge(slug, { capturesDir, sanitize: false });
+    captureMerge({ capturesDir, sanitize: false });
 
     const contract = JSON.parse(
       fs.readFileSync(serviceContractPath('svc-a', 'GET svc-a/v1/items'), 'utf8'),

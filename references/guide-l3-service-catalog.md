@@ -2,7 +2,9 @@
 
 ## 本层目标
 
-说清「mock 按**后端服务（upstreamId）**组织，不是按前端仓」；多前端如何共享同一服务 catalog。
+说清「mock 按**后端服务（service id）**组织，不是按前端仓」；多前端如何共享同一服务 catalog。
+
+名词：见 [docs/GLOSSARY.md](../docs/GLOSSARY.md)。
 
 ## 前置
 
@@ -10,26 +12,27 @@
 
 ## 逐步操作
 
-### 1. 对照两棵树
+### 1. 对照布局
 
 ```text
 .data/
-  services/<upstreamId>/     ← 真源：mocks / contracts / proxy-rules / models
-  projects/<slug>/
-    index.json               ← 本前端发现到的 stub 列表
-    classify / captures / …
+  services/<upstreamId>/     ← 唯一真源：mocks / contracts / captures / proxy-rules / models
+  classify/ reports/ audit/ scenarios/   ← 全局运维（非前端名）
 ```
 
-### 2. 读 index 如何挂到 service
+前端目录只是 `init` 的扫描输入，**不**成为 `.data` 一级命名空间。
 
-打开 `.data/projects/<slug>/index.json`，看 stubId（形如 `GET <upstreamId>/<path…>`）。  
-同一 `upstreamId` 被第二个前端 `init` 时，应写入**同一** `services/<upstreamId>/`，而不是复制一份到 project 下。
+### 2. 读 stubId 如何挂到 service
+
+打开任意 `services/<upstreamId>/contracts/*.json`，看 `stubId`（形如 `GET <upstreamId>/<path…>`）。  
+同一 `upstreamId` 被第二个前端目录 `init` 时，应写入**同一** `services/<upstreamId>/`。
 
 ### 3. 多 catalog 挂载
 
 ```bash
-mox start --name=tower --name=other
-# 省略 --name = 挂载全部可解析 catalog
+mox start --name=svc-a --name=svc-b
+# 省略 --name = 挂载全部 services
+# stub 级标签（不是前端包名）：mox start --rules tower
 ```
 
 代理只有**一个**进程；规则按 stub 合并。
@@ -37,8 +40,8 @@ mox start --name=tower --name=other
 ## 如何验收
 
 - [ ] 能指出某个 stub 的 handler 物理路径在 `services/…/mocks/…`
-- [ ] 理解 project `index.json` ≠ mocks 真源
-- [ ] 两个 `--name` 启动时只有一套 mock/proxy 端口
+- [ ] 理解无 `projects/`；溯源若需要将来落在契约元数据 / 报告，不是目录轴
+- [ ] 两个 `--name`（upstreamId）启动时只有一套 mock/proxy 端口
 
 ## 边界与下一层
 
@@ -48,4 +51,4 @@ Catalog 解决「文件放哪、谁共享」；**运行时可变状态**见下�
 ### 架构真源
 
 - [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
-- [docs/DECISIONS.md](../docs/DECISIONS.md) § 数据与 Service Catalog
+- [docs/DECISIONS.md](../docs/DECISIONS.md)

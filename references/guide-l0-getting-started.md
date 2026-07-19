@@ -4,6 +4,8 @@
 
 学完后能在任意前端仓：安装 CLI、生成 catalog、起 mock+proxy、停掉，并知道成功长什么样。
 
+名词：见 [docs/GLOSSARY.md](../docs/GLOSSARY.md)（service id / Catalog）。
+
 ## 前置
 
 - Node ≥ 18
@@ -24,21 +26,26 @@ mox help
 
 ```bash
 cd /path/to/frontend-app
-mox init --name=demo
+mox init
 ```
 
 预期：终端打印 generate 摘要；磁盘出现：
 
-- `.data/projects/demo/index.json`（项目索引）
-- `.data/services/<upstreamId>/`（契约 / mocks / proxy-rules；可能多个 upstream）
+- `.data/services/<upstreamId>/`（契约 / mocks / proxy-rules / captures；可能多个 upstream）
+- `.data/classify/request-roles.json`、`.data/reports/`、`.data/scenarios/`（全局运维产物）
+- **不应**出现 `.data/projects/`
 - 若识别到 CRUD 簇：对应 handler 可能带 `mox:store`；并有 `domain-draft.md`（静默产物）
 
 ### 3. 启动
 
 ```bash
-mox start --name=demo
+mox start
+# 只挂某个服务：
+# mox start --name=<upstreamId>
 # 需要打开页：
-# mox start --name=demo --start-url=http://localhost:8080
+# mox start --start-url=http://localhost:8080
+# 只 mock 某标签下的 stub：
+# mox start --rules tower
 ```
 
 预期日志含：
@@ -64,7 +71,7 @@ mox stop
 ## 如何验收
 
 - [ ] `mox help` Primary 无 service / domain-draft
-- [ ] `init` 后 `.data/projects/demo/` 与至少一个 `.data/services/*/proxy-rules.json` 存在
+- [ ] `init` 后无 `.data/projects/`；至少一个 `.data/services/*/proxy-rules.json` 存在
 - [ ] `start` 打印 store reset；端口可访问
 - [ ] `stop` 打印 journal 一行（可为 0 hits）
 
@@ -80,7 +87,6 @@ mox stop
 换端口或先 `mox stop`：
 
 ```bash
-mox start --name=demo --mock-port=3910 --proxy-port=19000
+mox stop
+# 或在 session.local.json / 启动参数改 mock.port / proxy.port
 ```
-
-深入：工具书 [session-and-proxy.md](./session-and-proxy.md)。

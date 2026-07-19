@@ -9,7 +9,7 @@ const { resolveClientProxyHost } = require('../scripts/start-session');
 const { loadDefault, deepMerge, loadSession } = require('../lib/session-config');
 const { setScenario } = require('../scripts/set-scenario');
 const { copyBuiltinScenarios } = require('../lib/scenario');
-const { ensureProjectDirs, projectDataDir } = require('../lib/paths');
+const { ensureDataDirs } = require('../lib/paths');
 
 test('resolveClientProxyHost: 0.0.0.0 bind → 127.0.0.1 for Chrome', () => {
   assert.equal(resolveClientProxyHost('0.0.0.0'), '127.0.0.1');
@@ -32,10 +32,10 @@ test('setScenario persists scenario name for session Wi‑Fi block', () => {
   const prev = process.env.MOX_SESSION_FILE;
   process.env.MOX_SESSION_FILE = sessionFile;
   try {
-    ensureProjectDirs(slug);
-    copyBuiltinScenarios(slug);
-    setScenario({ name: slug, scenario: 'e2e-fault' });
-    const cfg = loadSession(slug);
+    ensureDataDirs();
+    copyBuiltinScenarios();
+    setScenario({ scenario: 'e2e-fault' });
+    const cfg = loadSession();
     assert.equal(cfg.scenario, 'e2e-fault');
   } finally {
     process.env.MOX_SESSION_FILE = prev;
@@ -44,7 +44,6 @@ test('setScenario persists scenario name for session Wi‑Fi block', () => {
     } catch (_) {
       /* ignore */
     }
-    fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
   }
 });
 

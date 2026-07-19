@@ -42,14 +42,14 @@ fixtures/     Synthetic frontend samples for tests/smoke
 | `LICENSE` | MIT | keep | |
 | `eslint.config.js` | Lint config | keep | |
 | `.gitignore` | Ignores `.data/**`, logs, etc. | keep | |
-| `.data/` | Service catalog + project index + session | runtime | Never commit; local wipe OK |
+| `.data/` | Service catalog + global ops + session | runtime | Never commit; local wipe OK |
 | `node_modules/` | Dependencies | runtime | |
 
 ## `lib/`
 
 | Path | Role | Status | Notes |
 |------|------|--------|-------|
-| `lib/paths.js` | Data roots, stubId, service/project paths | keep | Legacy path helpers kept for compat |
+| `lib/paths.js` | Data roots, stubId, service paths, global ops dirs | keep | |
 | `lib/catalog-merge.js` | Catalog merge + contract/handler resolve | keep | **Truth API** for contracts/handlers |
 | `lib/session-config.js` | Global session / runtime JSON | keep | |
 | `lib/rules.js` | Shared rule packs | keep | |
@@ -137,6 +137,7 @@ fixtures/     Synthetic frontend samples for tests/smoke
 | Path | Role | Status | Notes |
 |------|------|--------|-------|
 | `docs/README.md` | Docs index | keep | |
+| `docs/GLOSSARY.md` | Noun glossary (service id / stub / …) | keep | |
 | `docs/ARCHITECTURE.md` | Architecture | keep | |
 | `docs/DECISIONS.md` | Locked decisions (SSOT) | keep | |
 | `docs/BACKLOG.md` | Open work | keep | |
@@ -183,6 +184,6 @@ All eight fixtures have consumers — none are delete candidates.
 - Fold overlapping OpenAPI / prune tests.
 - Top-level directory reorg (`scripts/` → `commands/`, etc.).
 
-## Done (slim projects)
+## Done (abolish projects/)
 
-- Stop dual-write of contracts / aggregate proxy-rules / upstreams under `projects/*/`; capture-merge writes service catalog truth.
+- No `.data/projects/` data axis; catalog = `services/<serviceId>/` only; ops under global `.data/{classify,reports,audit,scenarios}/`; `--name` = service id; `resolveUpstreamId` sole derive entry (no `prefix-` marker).

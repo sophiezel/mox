@@ -15,7 +15,8 @@ const {
   countCaptureFiles,
   hintMergeIfCaptures,
 } = require('../scripts/stop-session');
-const { ensureProjectDirs, projectDataDir } = require('../lib/paths');
+const { ensureDataDirs, serviceDataDir } = require('../lib/paths');
+const { capturesDirFor } = require('../lib/catalog-merge');
 const { setScenario } = require('../scripts/set-scenario');
 const { copyBuiltinScenarios } = require('../lib/scenario');
 
@@ -27,7 +28,7 @@ function withSlug(fn) {
   const prevR = process.env.MOX_RUNTIME_FILE;
   process.env.MOX_SESSION_FILE = sessionFile;
   process.env.MOX_RUNTIME_FILE = runtimeFile;
-  ensureProjectDirs(slug);
+  ensureDataDirs();
   try {
     return fn(slug);
   } finally {
@@ -40,7 +41,6 @@ function withSlug(fn) {
         /* ignore */
       }
     }
-    fs.rmSync(projectDataDir(slug), { recursive: true, force: true });
   }
 }
 
@@ -137,7 +137,7 @@ test('intent: record / mock hot-switch match traffic actions', () => {
 
 test('intent: scenario alias target setScenario works', () => {
   withSlug((slug) => {
-    copyBuiltinScenarios(slug);
+    copyBuiltinScenarios();
     setScenario({ name: slug, scenario: 'e2e-happy' });
     assert.equal(loadSession(slug).scenario, 'e2e-happy');
   });
@@ -145,31 +145,38 @@ test('intent: scenario alias target setScenario works', () => {
 
 test('intent: stop hints merge when captures exist', () => {
   withSlug((slug) => {
-    const capDir = path.join(projectDataDir(slug), 'captures');
+    const up = `intent-cap-${slug}`;
+    const capDir = capturesDirFor(up);
     fs.mkdirSync(capDir, { recursive: true });
     fs.writeFileSync(path.join(capDir, 'sample.json'), '{}\n');
-    assert.equal(countCaptureFiles(slug), 1);
+    assert.equal(countCaptureFiles([up]), 1);
 
     const logs = [];
     const orig = console.log;
     console.log = (...a) => logs.push(a.join(' '));
     try {
-      const n = hintMergeIfCaptures(slug);
+      const n = hintMergeIfCaptures([up]);
       assert.equal(n, 1);
       assert.ok(logs.some((l) => l.includes('hint:') && l.includes('merge')));
     } finally {
       console.log = orig;
     }
 
-    const out = stopSession({ name: slug });
+    const out = stopSession({ name: up });
     assert.equal(out.killed, false);
     assert.equal(out.captureCount, 1);
+    try {
+      fs.rmSync(capDir, { recursive: true, force: true });
+    } catch (_) {
+      /* ignore */
+    }
   });
 });
 
 test('intent: stop --auto-merge invokes capture-merge', () => {
   withSlug((slug) => {
-    const capDir = path.join(projectDataDir(slug), 'captures');
+    const up = `intent-merge-${slug}`;
+    const capDir = capturesDirFor(up);
     fs.mkdirSync(capDir, { recursive: true });
     fs.writeFileSync(
       path.join(capDir, 'GET__x.json'),
@@ -180,11 +187,16 @@ test('intent: stop --auto-merge invokes capture-merge', () => {
         body: { code: 0, data: { a: 1 } },
       }),
     );
-    const out = stopSession({ name: slug, autoMerge: true });
+    const out = stopSession({ name: up, autoMerge: true });
     assert.ok(out.mergeResult);
     const first = Array.isArray(out.mergeResult)
       ? out.mergeResult[0]
       : out.mergeResult;
     assert.equal(typeof first.merged, 'number');
+    try {
+      fs.rmSync(capDir, { recursive: true, force: true });
+    } catch (_) {
+      /* ignore */
+    }
   });
 });
