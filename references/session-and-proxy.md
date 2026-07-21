@@ -111,8 +111,10 @@ localhost / 127.0.0.1 Origin 默认放行；OPTIONS → 204；credentials 回显
 
 ## soft 未命中 / 录制
 
-- 真 miss（无 rule）且 `missPolicy=passthrough` → 透传 + `captures/`（`reason=miss`）
-- `all-passthrough` / selective 未放行 → 透传 + 录制（`reason=traffic-passthrough|traffic-selective-miss`）
+- 真 miss（无 rule）且 `missPolicy=passthrough` → 透传；**默认只写入 catalog 已覆盖 host** 的 `captures/`（`proxy.captureScope=catalog`）
+- 浏览器/CDN 噪声（`*.google.com` 等）**永不落盘**（内置 denylist，与 scope 无关）
+- 全量摸底：`proxy.captureScope=all`（仍过滤噪声）；可加 `captureNoiseSuffixes`
+- `all-passthrough` / selective 未放行 → 透传 + 同上门闸录制（`reason=traffic-passthrough|traffic-selective-miss`）
 - 写接口默认禁止透传（`blockWritePassthrough`）
 
 ## 场景热更新

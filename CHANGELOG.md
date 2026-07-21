@@ -8,6 +8,8 @@
 - 首次 `mox start` 未信任时自动安装 CA（login.keychain → admin System.keychain → 钥匙串「始终信任」）；已信任则零钥匙串写入。Cursor/无 GUI 终端若失败，改在 Terminal.app 跑 `mox trust-ca`。
 - 真机 CA 下载：`GET /mox/ca.cer` / `ca.pem`（`/__mox__/` 仍为别名）。
 - **Whistle-like 默认**：`proxy.host=0.0.0.0` + `allowOpenProxy=true`；`mox start` 打印真实 `LAN:port` 与 CA URL；收紧用 `--proxy-host=127.0.0.1` / `--no-open-proxy`。
+- **Capture 噪声门闸**：默认 `captureScope=catalog`（只录规则已覆盖 host）+ 浏览器/CDN 噪声后缀永不落盘；全量摸底用 `captureScope=all`。
+- **Start 门禁**：端口占用识别本机 mox session 并提示 `mox stop`；启动 Chrome 前清理 profile session 恢复文件。不探测、不代替启动前端。
 
 ### Fixed
 - HTTPS CONNECT：按 catalog `hosts[]` 覆盖做 MITM；本机绑定下未覆盖 host 自动隧道透传。

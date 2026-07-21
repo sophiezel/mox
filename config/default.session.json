@@ -8,6 +8,8 @@
     "blockWritePassthrough": true,
     "injectCaseHeader": "x-mock-case",
     "recordMisses": true,
+    "captureScope": "catalog",
+    "captureNoiseSuffixes": [],
     "passthroughHosts": [],
     "trafficMode": "all-mock",
     "mockAllowlist": [],

@@ -40,7 +40,7 @@ mox init
 
 ```bash
 mox start
-# 默认：MITM 开、打开 http://127.0.0.1:8000；首次未信任 CA 时会弹一次管理员密码写入 System.keychain
+# 默认：MITM 开、按配置打开 browser.startUrl（默认 http://127.0.0.1:8000）
 # 关闭 MITM：mox start --mitm=0
 # 换打开页：mox start --start-url=http://127.0.0.1:8080
 ```
@@ -51,6 +51,9 @@ mox start
 - `mock …` 与 `proxy …`
 - `HTTPS MITM enabled` / `MITM CA already trusted`（或首次 install）
 - `session running — Ctrl+C to stop`
+
+端口已被本机 mox 占用时，错误会提示 `mox stop`（而非只报 port in use）。
+前端需自行启动；mox 不探测、不代替起 FE。
 
 自启 Chromium 带 `--proxy-bypass-list=127.0.0.1;localhost;::1`，**不含**任何 `ignore-certificate*` 旗标。  
 真机：按 `mox start` 日志中的真实 `http://<LAN>:<proxyPort>/mox/ca.cer` 安装同一 CA（见 [`e2e-and-device-proxy.md`](./e2e-and-device-proxy.md)）。

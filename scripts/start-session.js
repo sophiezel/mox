@@ -9,6 +9,7 @@ const {
   chromeProfileDir,
   ensureChromeProfileDir,
   auditDir,
+  getGlobalRuntimePath,
 } = require('../lib/paths');
 const {
   loadSession,
@@ -31,6 +32,9 @@ const {
 } = require('../lib/rules');
 const { startMockServer } = require('../runtime/mock-server/server');
 const { startProxyServer } = require('../runtime/proxy/server');
+const {
+  explainPortBusy,
+} = require('../lib/start-preflight');
 
 function portFree(host, port) {
   return new Promise((resolve) => {
@@ -57,6 +61,24 @@ function findChrome() {
   return null;
 }
 
+function scrubChromeSessionRestore(userDataDir) {
+  if (!userDataDir || !fs.existsSync(userDataDir)) return;
+  const def = path.join(userDataDir, 'Default');
+  for (const name of [
+    'Current Session',
+    'Last Session',
+    'Current Tabs',
+    'Last Tabs',
+    'Sessions',
+  ]) {
+    try {
+      fs.rmSync(path.join(def, name), { recursive: true, force: true });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
 /** Chromium-family flags: proxy remote APIs, direct to local HTTP pages. No ignore-certificate* flags. */
 function buildChromiumLaunchArgs({
   userDataDir,
@@ -70,6 +92,8 @@ function buildChromiumLaunchArgs({
     `--proxy-server=${proxyServerArg}`,
     '--proxy-bypass-list=127.0.0.1;localhost;::1',
     '--no-first-run',
+    '--disable-session-crashed-bubble',
+    '--disable-restore-session-state',
     '--new-window',
   ];
   if (startUrl) args.push(startUrl);
@@ -245,10 +269,20 @@ async function startSession(opts = {}) {
   const proxyPort = cfg.proxy.port || 18999;
 
   if (!(await portFree(mockHost, mockPort))) {
-    throw new Error(`mock port in use: ${mockHost}:${mockPort}`);
+    const { hint } = explainPortBusy({
+      runtimePath: getGlobalRuntimePath(),
+      port: mockPort,
+      kind: 'mock',
+    });
+    throw new Error(`mock port in use: ${mockHost}:${mockPort} — ${hint}`);
   }
   if (cfg.proxy.enabled && !(await portFree(proxyHost, proxyPort))) {
-    throw new Error(`proxy port in use: ${proxyHost}:${proxyPort}`);
+    const { hint } = explainPortBusy({
+      runtimePath: getGlobalRuntimePath(),
+      port: proxyPort,
+      kind: 'proxy',
+    });
+    throw new Error(`proxy port in use: ${proxyHost}:${proxyPort} — ${hint}`);
   }
 
   const primary = catalogs[0];
@@ -334,6 +368,8 @@ async function startSession(opts = {}) {
       passthroughHosts: cfg.proxy.passthroughHosts || [],
       recordMisses: cfg.proxy.recordMisses !== false,
       recordMockHits: Boolean(cfg.proxy.recordMockHits || opts.recordMockHits),
+      captureScope: cfg.proxy.captureScope || 'catalog',
+      captureNoiseSuffixes: cfg.proxy.captureNoiseSuffixes || [],
       allowOpenProxy,
       rejectUnauthorized: cfg.proxy.rejectUnauthorized !== false,
       mitm,
@@ -421,10 +457,11 @@ async function startSession(opts = {}) {
   let chromePid = null;
   if (cfg.proxy.enabled && cfg.browser.autoLaunch && chrome && fs.existsSync(chrome)) {
     ensureChromeProfileDir(primary);
+    scrubChromeSessionRestore(userDataDir);
     const child = spawn(chrome, launchArgs, { detached: true, stdio: 'ignore' });
     child.unref();
     chromePid = child.pid;
-    console.log(`[mox] launched Chrome pid=${chromePid}`);
+    console.log(`[mox] launched Chrome pid=${chromePid} → ${startUrl}`);
   }
 
   const state = {

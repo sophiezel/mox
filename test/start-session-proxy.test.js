@@ -31,6 +31,7 @@ test('buildChromiumLaunchArgs has bypass list and never ignore-certificate flags
   });
   assert.ok(args.includes('--proxy-server=127.0.0.1:18999'));
   assert.ok(args.includes('--proxy-bypass-list=127.0.0.1;localhost;::1'));
+  assert.ok(args.includes('--disable-restore-session-state'));
   assert.ok(args.includes('http://127.0.0.1:8000/'));
   assert.ok(!args.some((a) => a.includes('ignore-certificate')));
 });

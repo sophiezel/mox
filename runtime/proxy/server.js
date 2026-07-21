@@ -20,6 +20,10 @@ const {
 } = require('../../lib/traffic-mode');
 const { forceCloseHttpServer } = require('../../lib/force-close-server');
 const { createStatefulEngine } = require('../../lib/stateful');
+const {
+  shouldWriteCapture,
+  normalizeCaptureScope,
+} = require('../../lib/capture-filter');
 
 const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024; // 10mb
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000;
@@ -102,6 +106,10 @@ function startProxyServer(opts) {
     passthroughHosts = [],
     recordMisses = true,
     recordMockHits = false,
+    /** catalog = only hosts covered by rules; all = any miss (noise denylist still applies) */
+    captureScope = 'catalog',
+    /** optional extra noise suffixes merged with defaults */
+    captureNoiseSuffixes = [],
     capturesDir,
     /** optional (stubId) => captures dir for that stub's catalog */
     resolveCapturesDir = null,
@@ -214,14 +222,27 @@ function startProxyServer(opts) {
     console.log(`[proxy] ${entry.action} ${entry.method} ${entry.url}`);
   }
 
+  const resolvedCaptureScope = normalizeCaptureScope(captureScope);
+
   function recordCapture(rec) {
     let dir = capturesDir;
     if (typeof resolveCapturesDir === 'function' && rec.stubId) {
       dir = resolveCapturesDir(rec.stubId) || dir;
     }
     if (!dir) return;
-    if (!recordMisses && rec.reason !== 'mock-hit') return;
-    if (rec.reason === 'mock-hit' && !recordMockHits) return;
+    if (
+      !shouldWriteCapture({
+        host: rec.host,
+        reason: rec.reason,
+        rules: activeRules,
+        captureScope: resolvedCaptureScope,
+        recordMisses,
+        recordMockHits,
+        captureNoiseSuffixes,
+      })
+    ) {
+      return;
+    }
     fs.mkdirSync(dir, { recursive: true });
     const name = `${Date.now()}-${(rec.host || 'h').replace(/\W/g, '_')}-${rec.path
       .replace(/\W/g, '_')
@@ -255,8 +276,19 @@ function startProxyServer(opts) {
   const server = http.createServer(async (req, res) => {
     try {
       const rawUrl = req.url || '/';
-      const pathOnly = rawUrl.split('?')[0];
-      // Device / desktop CA download (relative URL to this proxy)
+      // Absolute-form (phone Wi‑Fi proxy): "http://LAN:18999/mox/ca.cer"
+      const pathOnly = (() => {
+        const noQuery = rawUrl.split('?')[0];
+        if (noQuery.startsWith('http://') || noQuery.startsWith('https://')) {
+          try {
+            return new URL(noQuery).pathname;
+          } catch (_) {
+            return noQuery;
+          }
+        }
+        return noQuery;
+      })();
+      // Device / desktop CA download (relative or absolute URL to this proxy)
       if (
         req.method === 'GET' &&
         (pathOnly === '/mox/ca.cer' ||

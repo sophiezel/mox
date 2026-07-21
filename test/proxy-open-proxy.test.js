@@ -375,7 +375,96 @@ test('GET /mox/ca.cer serves DER CA; /__mox__/ alias still works', async () => {
     const alias = await getCa('/__mox__/ca.cer');
     assert.equal(alias.status, 200);
     assert.equal(alias.body.length, res.body.length);
+
+    // Absolute-form (as phone Wi‑Fi proxy clients send)
+    const abs = await new Promise((resolve, reject) => {
+      http
+        .request(
+          {
+            hostname: '127.0.0.1',
+            port: proxy.port,
+            path: `http://10.0.0.2:${proxy.port}/mox/ca.cer`,
+            method: 'GET',
+          },
+          (r) => {
+            const chunks = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () =>
+              resolve({ status: r.statusCode, body: Buffer.concat(chunks) }),
+            );
+          },
+        )
+        .on('error', reject)
+        .end();
+    });
+    assert.equal(abs.status, 200);
+    assert.equal(abs.body.length, res.body.length);
   } finally {
     await proxy.close();
+  }
+});
+
+test('captureScope=catalog drops uncovered host misses', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const capturesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-cap-'));
+  const upstream = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const upPort = upstream.address().port;
+
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: `http://127.0.0.1:${upPort}`,
+    rules: [
+      {
+        id: 'r1',
+        stubId: 'GET covered/x',
+        hosts: ['covered.example.test'],
+        pathPrefix: '/x',
+        methods: ['GET'],
+      },
+    ],
+    missPolicy: 'passthrough',
+    recordMisses: true,
+    captureScope: 'catalog',
+    capturesDir,
+    blockWritePassthrough: false,
+  });
+
+  async function proxyGet(absoluteUrl) {
+    return new Promise((resolve, reject) => {
+      http
+        .request(
+          {
+            hostname: '127.0.0.1',
+            port: proxy.port,
+            path: absoluteUrl,
+            method: 'GET',
+          },
+          (r) => {
+            r.resume();
+            r.on('end', () => resolve(r.statusCode));
+          },
+        )
+        .on('error', reject)
+        .end();
+    });
+  }
+
+  try {
+    // Uncovered host — passthrough succeeds but catalog scope must not capture
+    await proxyGet(`http://127.0.0.1:${upPort}/noise`);
+    await new Promise((r) => setTimeout(r, 30));
+    const files = fs.readdirSync(capturesDir);
+    assert.equal(files.length, 0, `unexpected captures: ${files.join(',')}`);
+  } finally {
+    await proxy.close();
+    await new Promise((r) => upstream.close(r));
+    fs.rmSync(capturesDir, { recursive: true, force: true });
   }
 });
