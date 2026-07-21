@@ -37,7 +37,7 @@ mox help --all
 | `--record` + `--traffic` 报错 | 二选一；或改用 `--rules` | [L2#traffic-flags](./guide-l2-runtime.md#traffic-flags) |
 | 列表看不到刚创建的数据 | 确认 handler 已 materialize；勿在两次 start 间指望无 `--keep-state` 的内存 | [L4](./guide-l4-virtual-service.md) |
 | 想重绑 CRUD store | `materialize-service --force` | [L5](./guide-l5-backend-inference.md) |
-| 真机 HTTPS 不改写 | `--mitm=1` + 信任 CA | [L2#device-proxy](./guide-l2-runtime.md#device-proxy) |
+| 真机 HTTPS CERT 无效 | 手机装 `/mox/ca.cer` + 完全信任；电脑 `mox trust-ca` / 首次 start | [L2#device-proxy](./guide-l2-runtime.md#device-proxy) |
 | 未知命令 | `help --all` + 本页 | 上文 Commands |
 
 ## 逐步操作（一次完整排障剧本）

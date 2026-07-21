@@ -10,7 +10,7 @@
 
 - `proxy.enabled` / CLI `--proxy=0|1`
 - `--mock-port` / `--proxy-port`（**代理入口端口**，与规则里的上游目标 port 正交）
-- `--proxy-host`（默认 `127.0.0.1`；真机/E2E 用 `0.0.0.0`）
+- `--proxy-host`（默认 `0.0.0.0`；仅本机用 `127.0.0.1`）
 - `--name=a --name=b`（或 `--name=a,b`）挂载 catalog；省略 = 全部
 - `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）；可与 `--record` 同用（仍 selective，只录透传）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
@@ -72,18 +72,35 @@ mox traffic all-mock                 # 自测
 
 ## 浏览器（桌面）
 
-独立 Chrome：
+独立 Chromium（Chrome / Edge）：
 
 ```bash
-Chrome --user-data-dir=.data/chrome-profiles/<slug> --proxy-server=127.0.0.1:<proxyPort>
+Chrome --user-data-dir=.data/chrome-profiles/<slug> \
+  --proxy-server=127.0.0.1:<proxyPort> \
+  --proxy-bypass-list=127.0.0.1;localhost;::1
 ```
+
+`mox start` 自动拉起时已带 bypass：本地 HTTP 页直连，远端 API 走代理。
+
+| 客户端 | 旁路 loopback |
+|--------|----------------|
+| Chromium 自启 | `--proxy-bypass-list=127.0.0.1;localhost;::1`；**零** `ignore-certificate*` 旗标（依赖系统信任的 mox CA） |
+
+HTTPS MITM（**默认开启**；`--mitm=0` 关闭）：
+
+- 首次 `mox start`：若尚未信任，自动 `installTrustedCa`（一次管理员密码 → System.keychain）
+- 之后 `mox start`：只检查信任，不改钥匙串
+- 真机：打开启动日志中的 `http://<真实LAN>:<proxyPort>/mox/ca.cer` 安装同一 CA
+- 修复入口：`mox trust-ca`
+- 代理侧对 **CONNECT 目标为 loopback** 一律拒绝
 
 登录：专用 profile 持久化；SSO/鉴权 host 可配 `passthroughHosts`。
 
 ## 真机 WebView
 
 ```bash
-mox session start --proxy-host=0.0.0.0
+mox start
+# 日志打印 Wi-Fi 代理: <LAN_IP>:<proxyPort> 与 CA URL
 ```
 
 启动日志打印 `Wi-Fi 代理: <LAN_IP>:<proxyPort>`，在手机 Wi‑Fi 手动代理填写。详见 `e2e-and-device-proxy.md`。

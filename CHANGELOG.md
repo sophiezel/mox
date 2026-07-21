@@ -2,8 +2,21 @@
 
 ## Unreleased
 
+### Changed
+- **默认开启 MITM**；日常 `mox start`（默认打开 `http://127.0.0.1:8000`）；`--mitm=0` 关闭。
+- 去掉一切 Chromium `ignore-certificate*` / `spki-list`；依赖 macOS trust settings（login / System / Keychain Always Trust）。
+- 首次 `mox start` 未信任时自动安装 CA（login.keychain → admin System.keychain → 钥匙串「始终信任」）；已信任则零钥匙串写入。Cursor/无 GUI 终端若失败，改在 Terminal.app 跑 `mox trust-ca`。
+- 真机 CA 下载：`GET /mox/ca.cer` / `ca.pem`（`/__mox__/` 仍为别名）。
+- **Whistle-like 默认**：`proxy.host=0.0.0.0` + `allowOpenProxy=true`；`mox start` 打印真实 `LAN:port` 与 CA URL；收紧用 `--proxy-host=127.0.0.1` / `--no-open-proxy`。
+
 ### Fixed
-- HTTPS CONNECT：`--mitm=1` 按 catalog `hosts[]` 覆盖做 MITM（不再用 `path=/` 误判）；本机 `127.0.0.1` 绑定下未覆盖 host 自动隧道透传。
+- HTTPS CONNECT：按 catalog `hosts[]` 覆盖做 MITM；本机绑定下未覆盖 host 自动隧道透传。
+- Chromium bypass 为显式 `127.0.0.1;localhost;::1`；CONNECT loopback 拒绝。
+- MITM CORS：OPTIONS 预检在 MITM 桥接处理。
+- `Ctrl+C` 快速退出（`closeAllConnections` + 超时）。
+
+### Added
+- `mox trust-ca [--open]` 重试/真机说明入口。
 
 ### Breaking
 - Service id 不再带 `prefix-` 元前缀；由 `resolveUpstreamId` / `consensusHostLabel` 推导（**host 族共识 → prefixKey**；**hostVar 永不进 id**）。同 ORIGIN 多环境合并为一个 catalog。本地请 `rm -rf .data/services && mox init --force`。

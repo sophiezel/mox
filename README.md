@@ -40,9 +40,8 @@ mox help --all    # 含较少用的命令
 ```bash
 cd /path/to/frontend-app
 mox init --name=demo
-mox start --name=demo
-# 需要打开页面时：
-# mox start --name=demo --start-url=http://localhost:8080
+mox start
+# 默认 MITM + 打开 http://127.0.0.1:8000；首次可能弹一次系统密码以信任 CA
 ```
 
 Catalog（真源）在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`；运行时状态在全局 `.data/session.json`。`init` 会静默写出域草稿并尽量绑上 CRUD Store；`start` 默认清空 Store（保留用 `--keep-state`）。停掉：
@@ -106,11 +105,12 @@ mox stop --name=demo --auto-merge
 
 同一 session 里热切换：`mox record` → 操作 → `mox merge` → `mox mock`。
 
-**真机代理**：
+**真机代理**（默认已对局域网开放，同 Whistle）：
 
 ```bash
-mox start --name=demo --proxy-host=0.0.0.0 --allow-open-proxy
-# 按日志填手机 Wi‑Fi 代理；HTTPS 加 --mitm=1（要 openssl）
+mox start --name=demo
+# 按日志抄 Wi‑Fi 代理 IP:port；手机装日志里的 http://<真实LAN>:<port>/mox/ca.cer
+# 仅本机：--proxy-host=127.0.0.1   收紧 CONNECT：--no-open-proxy
 ```
 
 见 [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md)。

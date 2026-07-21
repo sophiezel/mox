@@ -78,13 +78,15 @@ disable-model-invocation: true
 ```bash
 bash scripts/install.sh
 cd <frontend> && mox init [--task=ID] [--related-from=doc]
-mox start [--name=<upstreamId…>] [--rules kw…] [--task=ID] [--start-url=http://localhost:8080]
+mox start [--name=<upstreamId…>] [--rules kw…] [--task=ID]
 # 后台: mox start --detach
 mox scenario e2e-fault && mox merge
 mox stop
-# HTTPS 改写（可选）: start --mitm=1 （须信任打印的 CA）
-# LAN 开放代理须显式: --allow-open-proxy
+# 默认 MITM + 打开 http://127.0.0.1:8000；首次未信任 CA 弹一次系统密码
+# 关 MITM: --mitm=0   换打开页: --start-url=...
+# 真机: 看启动日志 Wi-Fi 代理 / CA URL（/mox/ca.cer）；修复: mox trust-ca
+# 仅本机: --proxy-host=127.0.0.1   收紧 LAN: --no-open-proxy
 # OpenAPI: mox import-openapi --from=./openapi.json
 ```
 
-详情与真机/`--proxy-host` → [`README.md`](./README.md)。**HTTPS 默认不改写**（CONNECT 隧道）；真机 HTTPS mock 用 `--mitm=1`。
+详情与真机/`--proxy-host` → [`README.md`](./README.md)。**HTTPS MITM 默认开启**（系统信任 CA，无 Chrome ignore 旗标）。

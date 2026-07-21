@@ -69,11 +69,12 @@ mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
   mox init [scanDir] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=1] [--keep-state] [--detach]
+  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=0] [--keep-state] [--detach]
   mox stop [--auto-merge]
   mox rules list|use <kw…>|save <name> [--rules-dir=DIR]
   mox scenario <name>
   mox smoke [--name=serviceId…] [--ci] [--cases=...] [--scenario=NAME]
+  mox trust-ca [--open]
 
 Optional (needs real upstream; not for E2E):
   mox start --record [--name=serviceId…]
@@ -100,8 +101,10 @@ Advanced / legacy (see references/guide-l6-advanced.md):
   mox install | uninstall
 
 Session security:
-  --allow-open-proxy   permit passthrough/CONNECT when binding 0.0.0.0 (default: reject)
-  --mitm=1             enable HTTPS MITM for matched hosts (requires openssl; trust printed CA)
+  --proxy-host=127.0.0.1  desktop-only bind (default: 0.0.0.0, Whistle-like LAN)
+  --no-open-proxy         lock CONNECT/passthrough on LAN bind (default: allow, like Whistle)
+  --allow-open-proxy      compat alias (default already allows open proxy on LAN)
+  --mitm=0                disable HTTPS MITM (default: on; first start installs system CA if needed)
 
 Flags:
   --name=a --name=b    mount service ids (or --name=a,b); omit = all services
@@ -278,8 +281,18 @@ async function runSessionStart(f) {
     startUrl: f['start-url'],
     autoLaunch: f['no-auto-launch'] ? false : undefined,
     scenario: f.scenario,
-    allowOpenProxy: Boolean(f['allow-open-proxy']),
-    mitm: f.mitm === true || f.mitm === '1' || f.mitm === 1,
+    allowOpenProxy: f['no-open-proxy']
+      ? false
+      : f['allow-open-proxy']
+        ? true
+        : undefined,
+    noOpenProxy: Boolean(f['no-open-proxy']),
+    mitm:
+      f.mitm === false || f.mitm === '0' || f.mitm === 0
+        ? false
+        : f.mitm === true || f.mitm === '1' || f.mitm === 1
+          ? true
+          : undefined,
     recordMockHits: Boolean(f['record-mock-hits']),
     record: Boolean(f.record) && wantRules,
     traffic,
@@ -485,6 +498,11 @@ async function main() {
   }
   if (cmd === 'scenario') {
     runScenario(f, rest[0]);
+    return;
+  }
+  if (cmd === 'trust-ca') {
+    const { trustCa } = require('../scripts/trust-ca');
+    trustCa({ open: Boolean(f.open) });
     return;
   }
   if (cmd === 'record') {

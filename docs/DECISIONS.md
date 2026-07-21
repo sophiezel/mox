@@ -100,12 +100,12 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 |----|------|
 | 浏览器（桌面） | 独立 Chrome：`--proxy-server` + 专用 `--user-data-dir` |
 | 真机 | 设备 Wi‑Fi 手动代理 → `proxyPort`（同 Whistle）；业务代码零改 |
-| proxy 绑定 | 桌面-only 可 `127.0.0.1`；真机/E2E 场景须 `0.0.0.0`，启动日志打印 **LAN IP:port** 供手机填写 |
-| LAN 安全 | **仅信任局域网，勿在公共 Wi‑Fi 开 0.0.0.0** |
+| proxy 绑定 | **默认 `0.0.0.0`**（Whistle-like）；桌面 Chrome 仍走 `127.0.0.1` proxy arg；仅本机用 `--proxy-host=127.0.0.1`；启动日志打印真实 **LAN IP:port** |
+| LAN 安全 | 默认 `allowOpenProxy=true`；公共 Wi‑Fi 勿用；收紧用 `--no-open-proxy` |
 | mock 命中 | `.data/services/<upstreamId>/mocks/<METHOD>/<path>/index.js` |
 | miss | soft：透传 + capture 写入 `services/<up>/captures/`，不因单接口拖垮 session |
 | CORS | 默认 localhost Origin；OPTIONS → 204；Hybrid WebView 非 localhost Origin 走 `cors.extraOrigins`（不实现「万能 Origin」） |
-| HTTPS | 默认 CONNECT 隧道透传；可选 `--mitm=1` 对命中 rules 的 host 做本地 CA MITM（须信任 CA；CA 在 `.data/mitm/`） |
+| HTTPS | 默认 MITM（catalog hosts）；CA 在 `.data/mitm/`；首次 `mox start` 写入 System.keychain；真机下 `/mox/ca.cer`；`--mitm=0` 关闭；Chrome 无 ignore-certificate 旗标 |
 | E2E scenario 隔离 | 一 worker 一 session，或用例 `beforeEach`/`afterEach` `set-scenario` 复位；不建分布式锁 |
 
 ## LLM 介入边界

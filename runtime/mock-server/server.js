@@ -2,6 +2,7 @@
 
 const http = require('http');
 const { createMockApp } = require('./app');
+const { forceCloseHttpServer } = require('../../lib/force-close-server');
 
 function startMockServer({
   mocksRoot,
@@ -24,8 +25,7 @@ function startMockServer({
         host,
         port: boundPort,
         url: `http://${host}:${boundPort}`,
-        close: () =>
-          new Promise((res, rej) => server.close((e) => (e ? rej(e) : res()))),
+        close: () => forceCloseHttpServer(server),
       });
     });
   });

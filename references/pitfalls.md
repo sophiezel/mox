@@ -11,6 +11,6 @@
 8b. **字段双写（cityId/city_id）** — UI state 与接口字段同名冲突时只保留接口侧键；勿把 `setData({ cityId })` 扫进 shape；faker 不增键
 8c. **init 盖掉 capture** — 普通 init 应保留 `usage+capture`；若要 usage 覆盖真值须显式 `--overwrite-capture`
 9. **静态非完备** — `gapApis` 非空时勿宣称 IO 完备
-10. **真机打不到代理** — 默认 `proxy.host=127.0.0.1`，真机须 `--proxy-host=0.0.0.0` 且电脑手机同局域网；勿在公共 Wi‑Fi 开 0.0.0.0
+10. **真机打不到代理** — 默认已绑 `0.0.0.0`；确认电脑手机同局域网且按日志填 IP:port；勿在公共 Wi‑Fi 使用；仅本机调试用 `--proxy-host=127.0.0.1`
 11. **E2E scenario 串台** — 并行 worker 共用 session 会互相覆盖 case；一 worker 一 session 或 `beforeEach`/`afterEach` 复位
 12. **只生成 success** — 未生成/未切故障 case 就跑异常路径 E2E，实际没测到；E2E 前显式 `set-scenario`

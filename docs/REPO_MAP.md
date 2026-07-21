@@ -67,7 +67,7 @@ fixtures/     Synthetic frontend samples for tests/smoke
 | `lib/audit.js` | Changelog audit log | keep | |
 | `lib/scenario.js` | Scenario load / builtin copy | keep | |
 | `lib/sanitize-capture.js` | Capture redaction | keep | |
-| `lib/mitm-ca.js` | MITM CA PEM | keep | `--mitm=1` only |
+| `lib/mitm-ca.js` | MITM CA + System.keychain trust | keep | default MITM / `trust-ca` |
 | `lib/vue-script.js` | Vue SFC script extract | keep | |
 | `lib/infer/*` | Discover / usage-IO / binding graph | keep | |
 | `lib/service-infer/*` | Intent → domain-draft → store handlers | keep | |
@@ -90,6 +90,7 @@ fixtures/     Synthetic frontend samples for tests/smoke
 | `scripts/generate-mock.js` | Contracts / handlers / index | keep | CLI `generate` |
 | `scripts/capture-merge.js` | Merge captures | keep | CLI `merge` |
 | `scripts/start-session.js` | Start mock+proxy | keep | CLI `start`; SIGHUP ignore |
+| `scripts/trust-ca.js` | Trust MITM CA + device hints | keep | CLI `trust-ca` |
 | `scripts/stop-session.js` | Stop + journal | keep | CLI `stop` |
 | `scripts/set-traffic.js` | Hot traffic mode | keep | |
 | `scripts/set-scenario.js` | Apply scenario | keep | |

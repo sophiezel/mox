@@ -44,15 +44,37 @@ function portFree(host, port) {
 function findChrome() {
   const candidates = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
     'google-chrome',
     'chromium',
+    'microsoft-edge',
   ];
   for (const c of candidates) {
     if (c.startsWith('/') && fs.existsSync(c)) return c;
     if (!c.startsWith('/')) return c;
   }
   return null;
+}
+
+/** Chromium-family flags: proxy remote APIs, direct to local HTTP pages. No ignore-certificate* flags. */
+function buildChromiumLaunchArgs({
+  userDataDir,
+  proxyServerArg,
+  clientProxyHost,
+  proxyPort,
+  startUrl = '',
+}) {
+  const args = [
+    `--user-data-dir=${userDataDir}`,
+    `--proxy-server=${proxyServerArg}`,
+    '--proxy-bypass-list=127.0.0.1;localhost;::1',
+    '--no-first-run',
+    '--new-window',
+  ];
+  if (startUrl) args.push(startUrl);
+  else args.push(`http://${clientProxyHost}:${proxyPort}/`);
+  return args;
 }
 
 function lanIp() {
@@ -95,10 +117,18 @@ function applySessionOpts(base, opts = {}) {
   if (opts.autoLaunch === false) {
     patch.browser = { ...(patch.browser || {}), autoLaunch: false };
   }
-  if (opts.allowOpenProxy === true || opts['allow-open-proxy'] === true) {
+  if (
+    opts.noOpenProxy === true ||
+    opts['no-open-proxy'] === true ||
+    opts.allowOpenProxy === false
+  ) {
+    patch.proxy = { ...(patch.proxy || {}), allowOpenProxy: false };
+  } else if (opts.allowOpenProxy === true || opts['allow-open-proxy'] === true) {
     patch.proxy = { ...(patch.proxy || {}), allowOpenProxy: true };
   }
-  if (opts.mitm === true || opts.mitm === '1') {
+  if (opts.mitm === false || opts.mitm === '0' || opts.mitm === 0) {
+    patch.proxy = { ...(patch.proxy || {}), mitm: { enabled: false } };
+  } else if (opts.mitm === true || opts.mitm === '1' || opts.mitm === 1) {
     patch.proxy = { ...(patch.proxy || {}), mitm: { enabled: true } };
   }
   if (opts.recordMockHits === true) {
@@ -211,7 +241,7 @@ async function startSession(opts = {}) {
 
   const mockHost = cfg.mock.host || '127.0.0.1';
   const mockPort = cfg.mock.port || 3900;
-  const proxyHost = cfg.proxy.host || '127.0.0.1';
+  const proxyHost = cfg.proxy.host || '0.0.0.0';
   const proxyPort = cfg.proxy.port || 18999;
 
   if (!(await portFree(mockHost, mockPort))) {
@@ -246,28 +276,34 @@ async function startSession(opts = {}) {
   );
 
   let proxy = null;
+  let mitm = null;
   if (cfg.proxy.enabled) {
     const casesLoader = () => {
       const live = loadSession();
       return live.cases || { default: 'success', active: {} };
     };
-    const allowOpenProxy = Boolean(
-      cfg.proxy.allowOpenProxy || opts.allowOpenProxy || opts['allow-open-proxy'],
-    );
-    let mitm = null;
-    if (cfg.proxy.mitm?.enabled || opts.mitm === true || opts.mitm === '1') {
-      try {
-        const { createMitmCa } = require('../lib/mitm-ca');
-        const ca = createMitmCa(primary);
-        mitm = {
-          enabled: true,
-          getSecureContext: (hostname) => ca.getSecureContext(hostname),
-          caCertPath: ca.caCertPath,
-        };
-        console.log(`[mox] HTTPS MITM enabled; trust CA: ${ca.caCertPath}`);
-      } catch (e) {
-        console.warn(`[mox] MITM unavailable: ${e.message}`);
+    const allowOpenProxy = cfg.proxy.allowOpenProxy !== false;
+    const wantMitm = cfg.proxy.mitm?.enabled !== false;
+    if (wantMitm) {
+      const {
+        createMitmCa,
+        ensureMitmCaReady,
+        logTrustedCaResult,
+      } = require('../lib/mitm-ca');
+      const trust = ensureMitmCaReady();
+      logTrustedCaResult(trust);
+      if (!trust.ok) {
+        throw new Error(
+          `MITM CA not trusted — finish Always Trust in Keychain, then re-run mox start in Terminal.app (${trust.error || 'install failed'})`,
+        );
       }
+      const ca = createMitmCa(primary);
+      mitm = {
+        enabled: true,
+        getSecureContext: (hostname) => ca.getSecureContext(hostname),
+        caCertPath: ca.caCertPath,
+      };
+      console.log(`[mox] HTTPS MITM enabled; CA: ${ca.caCertPath}`);
     }
     const statefulLoader = () => {
       const live = loadSession();
@@ -309,24 +345,44 @@ async function startSession(opts = {}) {
     console.log(
       `[mox] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,
     );
-    if (proxyHost === '0.0.0.0') {
+    {
       const ip = lanIp();
       const scenarioLabel = cfg.scenario || opts.scenario || '(unset)';
+      const wifiHost = ip || resolveClientProxyHost(proxyHost);
       console.log('');
       console.log('===【真机 Wi‑Fi 代理】手机 Wi‑Fi 手动代理填写===');
-      console.log(`  host: ${ip || '<电脑LAN_IP>'}`);
-      console.log(`  port: ${proxyPort}`);
-      console.log(`  scenario: ${scenarioLabel}`);
-      console.log('  仅信任局域网，勿在公共 Wi‑Fi 开 0.0.0.0');
-      if (!allowOpenProxy) {
-        console.log('  missPolicy=reject（未传 --allow-open-proxy）；CONNECT 仅放行 passthroughHosts');
+      if (ip) {
+        console.log(`  host: ${ip}`);
+        console.log(`  port: ${proxyPort}`);
+        console.log(`  Wi-Fi 代理: ${ip}:${proxyPort}`);
       } else {
-        console.log('  WARNING: --allow-open-proxy 已开启，本机可被用作开放代理');
+        console.log(`  host: (未检测到局域网 IP；本机可用 ${wifiHost})`);
+        console.log(`  port: ${proxyPort}`);
+      }
+      console.log(`  scenario: ${scenarioLabel}`);
+      if (proxyHost === '0.0.0.0' || proxyHost === '::') {
+        console.log('  仅信任局域网，勿在公共 Wi‑Fi 使用（默认对 LAN 开放，同 Whistle）');
+      } else {
+        console.log(`  bind: ${proxyHost}（本机限定；真机请用默认 0.0.0.0 或改 --proxy-host）`);
+      }
+      if (!allowOpenProxy) {
+        console.log('  missPolicy/CONNECT 已收紧（--no-open-proxy）；CONNECT 仅放行 passthroughHosts');
       }
       if (mitm?.caCertPath) {
-        console.log(`  HTTPS MITM CA（真机需安装信任）: ${mitm.caCertPath}`);
+        console.log(`  HTTPS MITM CA（电脑+手机同一份）: ${mitm.caCertPath}`);
+        if (ip) {
+          const base = `http://${ip}:${proxyPort}`;
+          console.log(`  手机安装: ${base}/mox/ca.cer`);
+        } else {
+          console.log(
+            `  手机安装: http://<电脑局域网IP>:${proxyPort}/mox/ca.cer（先确认电脑与手机同网）`,
+          );
+        }
+        console.log('  iOS: 安装后 → 设置 → 通用 → 关于本机 → 证书信任设置 → 打开完全信任');
+        console.log('  Android: 设置 → 安全 → 安装证书 → CA；WebView 可能仍不信任用户 CA');
+        console.log('  电脑重试: 再执行一次 mox start（或 mox trust-ca）');
       } else {
-        console.log('  HTTPS: catalog host 须 --mitm=1 才能改写；本机未覆盖 host 自动 CONNECT 隧道');
+        console.log('  HTTPS: 当前未启用 MITM（--mitm=0）；catalog host 无法改写');
       }
       console.log('');
     }
@@ -338,12 +394,24 @@ async function startSession(opts = {}) {
   const chrome = findChrome();
   const clientProxyHost = resolveClientProxyHost(proxyHost);
   const proxyServerArg = `${clientProxyHost}:${proxyPort}`;
-  const startUrl = cfg.browser.startUrl || '';
+  const startUrl = cfg.browser.startUrl || 'http://127.0.0.1:8000';
+  const launchArgs = buildChromiumLaunchArgs({
+    userDataDir,
+    proxyServerArg,
+    clientProxyHost,
+    proxyPort,
+    startUrl,
+  });
   const chromeCmd = chrome
-    ? `"${chrome}" --user-data-dir="${userDataDir}" --proxy-server="${proxyServerArg}" --no-first-run ${
-        startUrl ? `"${startUrl}"` : ''
-      }`
-    : `(find Google Chrome) --user-data-dir="${userDataDir}" --proxy-server="${proxyServerArg}" --no-first-run`;
+    ? `"${chrome}" ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`
+    : `(find Chromium/Chrome/Edge) ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+
+  if (cfg.proxy.enabled) {
+    console.log('');
+    console.log(
+      '[mox] proxy tip: local pages bypass proxy (127.0.0.1;localhost;::1); remote APIs via mox. MITM uses system-trusted CA (no Chrome ignore-certificate flags). Firefox/Safari: system proxy bypass list.',
+    );
+  }
 
   console.log('');
   console.log('===【Mock 自测浏览器】请只在此窗口自测===');
@@ -353,15 +421,7 @@ async function startSession(opts = {}) {
   let chromePid = null;
   if (cfg.proxy.enabled && cfg.browser.autoLaunch && chrome && fs.existsSync(chrome)) {
     ensureChromeProfileDir(primary);
-    const args = [
-      `--user-data-dir=${userDataDir}`,
-      `--proxy-server=${proxyServerArg}`,
-      '--no-first-run',
-      '--new-window',
-    ];
-    if (startUrl) args.push(startUrl);
-    else args.push(`http://${clientProxyHost}:${proxyPort}/`);
-    const child = spawn(chrome, args, { detached: true, stdio: 'ignore' });
+    const child = spawn(chrome, launchArgs, { detached: true, stdio: 'ignore' });
     child.unref();
     chromePid = child.pid;
     console.log(`[mox] launched Chrome pid=${chromePid}`);
@@ -399,7 +459,10 @@ async function startSession(opts = {}) {
   } catch {
     /* platform may not support SIGHUP */
   }
-  const shutdown = async () => {
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log('\n[mox] stopping...');
     if (chromePid) {
       try {
@@ -408,12 +471,27 @@ async function startSession(opts = {}) {
         /* ignore */
       }
     }
-    if (proxy) await proxy.close().catch(() => {});
-    await mock.close().catch(() => {});
-    saveRuntimeState({ ...state, stoppedAt: new Date().toISOString() });
-    appendAudit(primary, { command: 'session stop', taskId, summary: 'stopped' });
-    console.log(journalSummary().line);
-    process.exit(0);
+    // Hard deadline so one Ctrl+C never hangs on keep-alive / CONNECT tunnels.
+    const hardExit = setTimeout(() => process.exit(0), 1000);
+    if (typeof hardExit.unref === 'function') hardExit.unref();
+    (async () => {
+      try {
+        if (proxy) await proxy.close().catch(() => {});
+        await mock.close().catch(() => {});
+        saveRuntimeState({ ...state, stoppedAt: new Date().toISOString() });
+        appendAudit(primary, {
+          command: 'session stop',
+          taskId,
+          summary: 'stopped',
+        });
+        console.log(journalSummary().line);
+      } catch (_) {
+        /* ignore — still exit */
+      } finally {
+        clearTimeout(hardExit);
+        process.exit(0);
+      }
+    })();
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
@@ -421,7 +499,14 @@ async function startSession(opts = {}) {
   await new Promise(() => {});
 }
 
-module.exports = { startSession, findChrome, resolveClientProxyHost, applySessionOpts };
+module.exports = {
+  startSession,
+  findChrome,
+  buildChromiumLaunchArgs,
+  resolveClientProxyHost,
+  applySessionOpts,
+  lanIp,
+};
 
 if (require.main === module) {
   startSession({

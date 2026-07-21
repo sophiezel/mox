@@ -18,6 +18,7 @@ const {
   trafficPassthroughReason,
   normalizeTrafficMode,
 } = require('../../lib/traffic-mode');
+const { forceCloseHttpServer } = require('../../lib/force-close-server');
 const { createStatefulEngine } = require('../../lib/stateful');
 
 const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024; // 10mb
@@ -59,12 +60,27 @@ function isLoopbackBind(host) {
   );
 }
 
+/** CONNECT / request target hostname is loopback (local HTTP/HTTPS origin). */
+function isLoopbackHostname(hostname) {
+  const h = String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  return (
+    h === '127.0.0.1' ||
+    h === 'localhost' ||
+    h === '::1' ||
+    h === '0.0.0.0'
+  );
+}
+
 /**
  * Start forward proxy + optional HTTPS MITM for matched hosts.
  *
  * Security defaults:
  * - CONNECT MITM when --mitm and hostname is covered by rule hosts[]
- * - CONNECT tunnel on loopback bind for non-covered hosts (CDN etc.)
+ * - CONNECT to loopback targets always denied (local HTTP dev servers)
+ * - CONNECT tunnel on loopback bind for non-covered remote hosts (CDN etc.)
  * - On 0.0.0.0 without allowOpenProxy: tunnel only passthroughHosts
  * - Body size limited; upstream timeout applied
  */
@@ -153,7 +169,7 @@ function startProxyServer(opts) {
 
   if (isLanBind(host) && !allowOpenProxy) {
     console.warn(
-      '[proxy] WARNING: bound to all interfaces without --allow-open-proxy; missPolicy forced to reject; CONNECT denied except passthroughHosts',
+      '[proxy] WARNING: bound to all interfaces with allowOpenProxy=false (--no-open-proxy); missPolicy forced to reject; CONNECT denied except passthroughHosts',
     );
   }
 
@@ -222,9 +238,11 @@ function startProxyServer(opts) {
   }
 
   function allowConnectTunnel(hostname, port = null) {
+    // Never tunnel CONNECT to local page origins (any browser / system proxy).
+    if (isLoopbackHostname(hostname)) return false;
     if (isPassthroughHost(hostname, port)) return true;
     if (allowOpenProxy && forcedMissPolicy === 'passthrough') return true;
-    // Desktop self-test: loopback proxy may tunnel HTTPS not in catalog
+    // Desktop self-test: loopback-bound proxy may tunnel remote HTTPS not in catalog
     // (static CDN, maps, browser noise). LAN bind stays locked down.
     if (isLoopbackBind(host) && !isLanBind(host)) return true;
     return false;
@@ -236,6 +254,44 @@ function startProxyServer(opts) {
 
   const server = http.createServer(async (req, res) => {
     try {
+      const rawUrl = req.url || '/';
+      const pathOnly = rawUrl.split('?')[0];
+      // Device / desktop CA download (relative URL to this proxy)
+      if (
+        req.method === 'GET' &&
+        (pathOnly === '/mox/ca.cer' ||
+          pathOnly === '/mox/ca.pem' ||
+          pathOnly === '/mox/ca.cert.pem' ||
+          pathOnly === '/__mox__/ca.cer' ||
+          pathOnly === '/__mox__/ca.pem' ||
+          pathOnly === '/__mox__/ca.cert.pem')
+      ) {
+        try {
+          const { readCaDownloadFiles } = require('../../lib/mitm-ca');
+          const { pem, der } = readCaDownloadFiles();
+          if (pathOnly.endsWith('.cer')) {
+            res.writeHead(200, {
+              'Content-Type': 'application/pkix-cert',
+              'Content-Disposition': 'attachment; filename="mox-ca.cer"',
+              'Content-Length': der.length,
+            });
+            res.end(der);
+          } else {
+            res.writeHead(200, {
+              'Content-Type': 'application/x-pem-file',
+              'Content-Disposition': 'attachment; filename="mox-ca.pem"',
+              'Content-Length': pem.length,
+            });
+            res.end(pem);
+          }
+          logAccess({ action: 'mox-ca-download', method: 'GET', url: pathOnly });
+        } catch (e) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ code: 503, message: e.message }));
+        }
+        return;
+      }
+
       if (req.method === 'OPTIONS') {
         handleOptions(req, res, cors);
         logAccess({ action: 'options', method: 'OPTIONS', url: req.url });
@@ -430,6 +486,22 @@ function startProxyServer(opts) {
     const [hostname, portStr] = (req.url || '').split(':');
     const portNum = Number(portStr || 443);
 
+    // Local HTTP(S) origins must bypass the proxy in the browser — never CONNECT-tunnel them.
+    if (isLoopbackHostname(hostname)) {
+      clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      clientSocket.end();
+      logAccess({
+        action: 'connect-deny-loopback',
+        method: 'CONNECT',
+        url: req.url,
+        hint: 'bypass loopback in browser proxy settings; do not HTTPS-CONNECT to local HTTP dev servers',
+      });
+      console.warn(
+        `[proxy] connect-deny CONNECT ${req.url} (loopback target — bypass localhost/127.0.0.1 in browser proxy; local HTTP pages must not use CONNECT)`,
+      );
+      return;
+    }
+
     const mitmEnabled = Boolean(mitm?.enabled && typeof mitm.getSecureContext === 'function');
     // Host coverage only — pathPrefix rules never match CONNECT probe path "/"
     const ruleHit =
@@ -499,12 +571,25 @@ function startProxyServer(opts) {
     const bridge = http.createServer(async (req, res) => {
       const urlPath = req.url || '/';
       const method = req.method || 'GET';
+
+      // Browser preflight never hits catalog method rules — answer CORS here.
+      if (method === 'OPTIONS') {
+        handleOptions(req, res, cors);
+        logAccess({
+          action: 'mitm-options',
+          method: 'OPTIONS',
+          url: `https://${hostname}${urlPath}`,
+        });
+        return;
+      }
+
       let body = Buffer.alloc(0);
       try {
         if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
           body = await readBody(req, { limit: bodyLimit });
         }
       } catch (e) {
+        applyCorsHeaders(req, res, cors);
         res.statusCode = 413;
         res.end(JSON.stringify({ code: 413, message: e.message }));
         return;
@@ -523,6 +608,7 @@ function startProxyServer(opts) {
 
       if (!rule || !ruleShouldMock(rule)) {
         if (!rule && forcedMissPolicy === 'reject' && !allowOpenProxy) {
+          applyCorsHeaders(req, res, cors);
           res.statusCode = 404;
           res.end(JSON.stringify({ code: 404, message: 'no mock rule (mitm)' }));
           return;
@@ -544,6 +630,7 @@ function startProxyServer(opts) {
           },
         );
         upReq.on('error', (e) => {
+          applyCorsHeaders(req, res, cors);
           res.statusCode = 502;
           res.end(JSON.stringify({ code: 502, message: e.message }));
         });
@@ -588,6 +675,7 @@ function startProxyServer(opts) {
         },
       );
       mockReq.on('error', (e) => {
+        applyCorsHeaders(req, res, cors);
         res.statusCode = 502;
         res.end(JSON.stringify({ code: 502, message: e.message }));
       });
@@ -692,8 +780,7 @@ function startProxyServer(opts) {
           };
           trafficCacheAt = 0;
         },
-        close: () =>
-          new Promise((res, rej) => server.close((e) => (e ? rej(e) : res()))),
+        close: () => forceCloseHttpServer(server),
       });
     });
   });
@@ -706,4 +793,5 @@ module.exports = {
   readBody,
   isLanBind,
   isLoopbackBind,
+  isLoopbackHostname,
 };
