@@ -10,6 +10,7 @@ const { applyCorsHeaders, handleOptions } = require('../../lib/cors');
 const {
   matchRule,
   matchPassthroughHost,
+  hostCoveredByRules,
   defaultPortForScheme,
 } = require('../../lib/match-rule');
 const {
@@ -49,12 +50,22 @@ function isLanBind(host) {
   return host === '0.0.0.0' || host === '::' || host === '[::]';
 }
 
+function isLoopbackBind(host) {
+  return (
+    host === '127.0.0.1' ||
+    host === 'localhost' ||
+    host === '::1' ||
+    host === '[::1]'
+  );
+}
+
 /**
  * Start forward proxy + optional HTTPS MITM for matched hosts.
  *
  * Security defaults:
- * - CONNECT tunneling denied unless allowOpenProxy or host is in passthroughHosts
- * - When bound to 0.0.0.0 without allowOpenProxy, missPolicy forced to reject
+ * - CONNECT MITM when --mitm and hostname is covered by rule hosts[]
+ * - CONNECT tunnel on loopback bind for non-covered hosts (CDN etc.)
+ * - On 0.0.0.0 without allowOpenProxy: tunnel only passthroughHosts
  * - Body size limited; upstream timeout applied
  */
 function startProxyServer(opts) {
@@ -213,6 +224,9 @@ function startProxyServer(opts) {
   function allowConnectTunnel(hostname, port = null) {
     if (isPassthroughHost(hostname, port)) return true;
     if (allowOpenProxy && forcedMissPolicy === 'passthrough') return true;
+    // Desktop self-test: loopback proxy may tunnel HTTPS not in catalog
+    // (static CDN, maps, browser noise). LAN bind stays locked down.
+    if (isLoopbackBind(host) && !isLanBind(host)) return true;
     return false;
   }
 
@@ -417,13 +431,9 @@ function startProxyServer(opts) {
     const portNum = Number(portStr || 443);
 
     const mitmEnabled = Boolean(mitm?.enabled && typeof mitm.getSecureContext === 'function');
+    // Host coverage only — pathPrefix rules never match CONNECT probe path "/"
     const ruleHit =
-      mitmEnabled &&
-      matchRule(activeRules, hostname, '/', 'GET', {
-        query: {},
-        headers: {},
-        port: portNum,
-      });
+      mitmEnabled && hostCoveredByRules(activeRules, hostname, portNum);
 
     if (mitmEnabled && ruleHit) {
       try {
@@ -689,4 +699,11 @@ function startProxyServer(opts) {
   });
 }
 
-module.exports = { startProxyServer, matchRule, loadRules, readBody, isLanBind };
+module.exports = {
+  startProxyServer,
+  matchRule,
+  loadRules,
+  readBody,
+  isLanBind,
+  isLoopbackBind,
+};

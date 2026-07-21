@@ -326,7 +326,7 @@ async function startSession(opts = {}) {
       if (mitm?.caCertPath) {
         console.log(`  HTTPS MITM CA（真机需安装信任）: ${mitm.caCertPath}`);
       } else {
-        console.log('  HTTPS: 默认仅 CONNECT 隧道（无法改写）；启用 MITM: --mitm=1');
+        console.log('  HTTPS: catalog host 须 --mitm=1 才能改写；本机未覆盖 host 自动 CONNECT 隧道');
       }
       console.log('');
     }

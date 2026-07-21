@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- HTTPS CONNECT：`--mitm=1` 按 catalog `hosts[]` 覆盖做 MITM（不再用 `path=/` 误判）；本机 `127.0.0.1` 绑定下未覆盖 host 自动隧道透传。
+
 ### Breaking
 - Service id 不再带 `prefix-` 元前缀；由 `resolveUpstreamId` / `consensusHostLabel` 推导（**host 族共识 → prefixKey**；**hostVar 永不进 id**）。同 ORIGIN 多环境合并为一个 catalog。本地请 `rm -rf .data/services && mox init --force`。
 - 同 service id 且 `hosts` 不相交时 generate 硬失败（禁止静默合并不同域名后端）。

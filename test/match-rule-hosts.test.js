@@ -89,3 +89,30 @@ test('hosts[] with wildcard suffix *.example.com', () => {
   assert.ok(matchRule(rules, 'sub.example.com', '/v1/x', 'GET'));
   assert.equal(matchRule(rules, 'sub.other.com', '/v1/x', 'GET'), null);
 });
+
+test('hostCoveredByRules: true when host in hosts[] regardless of path', () => {
+  const { hostCoveredByRules, matchRule } = require('../lib/match-rule');
+  const rules = [
+    {
+      id: 'GET svc-a/api/x',
+      hosts: ['svc.example.com'],
+      pathPrefix: '/api/x',
+      methods: ['GET'],
+    },
+  ];
+  assert.equal(matchRule(rules, 'svc.example.com', '/', 'GET'), null);
+  assert.equal(hostCoveredByRules(rules, 'svc.example.com', 443), true);
+  assert.equal(hostCoveredByRules(rules, 'other.example.com', 443), false);
+});
+
+test('hostCoveredByRules: ignores unbounded host:* rules', () => {
+  const { hostCoveredByRules } = require('../lib/match-rule');
+  assert.equal(
+    hostCoveredByRules(
+      [{ host: '*', pathPrefix: '/public', methods: ['GET'] }],
+      'anything.example.com',
+      443,
+    ),
+    false,
+  );
+});

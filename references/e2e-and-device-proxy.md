@@ -58,8 +58,9 @@ mox session start --proxy-host=0.0.0.0 --mitm=1
 
 | 模式 | 行为 |
 |------|------|
-| 默认 | CONNECT **隧道透传**，**不改写** HTTPS 响应 |
-| `--mitm=1` | 本地 CA（openssl）对 **proxy-rules 命中 host** 做 MITM；须在桌面/真机信任打印的 CA 路径 |
+| 默认（无 `--mitm`） | 本机 `127.0.0.1` 绑定：未入 catalog 的 HTTPS **CONNECT 隧道透传**；catalog host 仍无法改写响应 |
+| `--mitm=1` | 对 **proxy-rules 里 `hosts[]` 覆盖的 hostname** 做 MITM（按 host，不看 path）；须信任 `.data/mitm/` CA |
+| LAN `0.0.0.0` 未开 `--allow-open-proxy` | CONNECT 默认拒绝（仅 `passthroughHosts` 可隧道） |
 | 外挂 | Whistle 等做 MITM 后再链到本 CLI |
 
 生产 H5 几乎全是 HTTPS——真机要 mock 响应请用 `--mitm=1` 或 HTTP 调试域。
