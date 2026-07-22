@@ -27,7 +27,7 @@
 | **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
 | 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
 | Rules | 包根 `rules/*.json` stub 包或 `*.txt` Whistle map（或 `--rules-dir` / `MOX_RULES_DIR`）；`--rules=a,b` / 空格多值 **merge**，找不到的名字**跳过**；同名优先 `.json` |
-| Map | `mox map import <file>` 与 `--rules` 加载 `.txt` 等价语义：`selective` + allowlist + 增量 `proxy-rules` + `captureMitmHosts`；`127.0.0.1` 仅表示走本地 mock |
+| Map | `mox map import` / `--rules` `.txt`：Whistle **pattern 子集**（`https://host/path` \| `host/path` \| `host`；可选第二列 `/path` 或 `http(s)://…` 仅标记本地 mock）；单列合法；**拒绝**纯 `/path`；协议不参与运行时匹配；path 前缀 `/` 边界 |
 | `proxy.mode` | `mock-lab`（默认）\| `capture-open`；CLI `--capture-open`（已弃用 `--record` / `record-first` / `mox record`） |
 | 提测 | `mox quality-gate` exit 0 = 可提测（Z1）；可选 `--require-mitm-check=`（H1：须系统代理 WebView） |
 | 真机助手 | `mox device prepare --lan-ip=`：ADB 设代理、push CA、提示 `__mox_mitm_check`（不输 PIN） |

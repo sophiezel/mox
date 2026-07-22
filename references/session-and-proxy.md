@@ -12,7 +12,7 @@
 - `--mock-port` / `--proxy-port`（**代理入口端口**，与规则里的上游目标 port 正交）
 - `--proxy-host`（默认 `0.0.0.0`；仅本机用 `127.0.0.1`）
 - `--name=a --name=b`（或 `--name=a,b`）挂载 catalog；省略 = 全部
-- `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）：`rules/<name>.json` stub 包，或 Whistle 两列 `rules/<name>.txt` map；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
+- `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）：`rules/<name>.json` stub 包，或 Whistle-like `rules/<name>.txt` map（单列 pattern 或可选第二列本地标记）；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
 - `--traffic=all-mock|all-passthrough|selective` 启动时流量模式（写入全局 session）
 - `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 明文落盘；map/allowlist 仍可强制 mock）。**不等于**全透传；纯全透传请用 `mox traffic all-passthrough` 或 `--traffic=all-passthrough`
@@ -84,9 +84,11 @@ Catalog / `proxy-rules.json` 可全量存在；**运行时是否 mock 由 `traff
 ```bash
 mox traffic all-passthrough          # 纯全透传录制（非 --capture-open）
 mox traffic selective
-mox start --rules=csp-trade           # rules/csp-trade.txt Whistle map → selective
+mox start --rules=csp-trade           # rules/csp-trade.txt map pattern → selective
 mox start --rules=csp-trade,csp-tasks # multi merge；不存在的名字忽略
 mox map import ./whistle-map.txt     # 等价一次性导入（可 --save-as 落成 .json）
+# map .txt 例：jian-j.example.com/csp-task   或  https://host/path /path
+# 拒绝纯 path（无 host）；path 前缀按 Whistle `/` 边界匹配
 mox traffic allow "GET svc-a/v1/items"
 mox traffic list
 mox traffic all-mock                 # 自测
@@ -99,7 +101,8 @@ mox traffic all-mock                 # 自测
 规则 `hosts[]` 支持 `hostname` 或 `hostname:port`；可选 `ports: [443, 8443]`。  
 请求 port 从 URL / Host 解析（缺省 http→80，https→443）。同 host 不同 port 互不误伤。
 
-不做：Whistle 全文 DSL、二级企业 `proxy://` 链、Map Remote URL 改写。
+不做：Whistle 全文 DSL（`$`/`^`/`/regex/`/filters）、二级企业 `proxy://` 链、Map Remote URL 改写；协议维不进入运行时匹配。
+pathPrefix 匹配对齐 Whistle：`/v1` 匹配 `/v1`、`/v1/x`，不匹配 `/v1xxx`。
 
 ## 浏览器（桌面）
 

@@ -41,6 +41,51 @@ https://cdn.example.com/static http://127.0.0.1/static
   }
 });
 
+test('parseMapText accepts single-column and schemeless host/path', () => {
+  const { parseMapText } = require('../lib/map-import');
+  const rows = parseMapText(`
+jian-j.example.com/csp-task/list
+https://api.example.com/v1/users /v1/users
+pay.example.com
+api.example.com:8443/checkout http://127.0.0.1/
+`);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows[0], {
+    host: 'jian-j.example.com',
+    pathPrefix: '/csp-task/list',
+  });
+  assert.deepEqual(rows[1], {
+    host: 'api.example.com',
+    pathPrefix: '/v1/users',
+    localUrl: '/v1/users',
+  });
+  assert.deepEqual(rows[2], {
+    host: 'pay.example.com',
+    pathPrefix: '/',
+  });
+  assert.deepEqual(rows[3], {
+    host: 'api.example.com:8443',
+    pathPrefix: '/checkout',
+    localUrl: 'http://127.0.0.1/',
+  });
+});
+
+test('parseMapText rejects path-only pattern and bad columns', () => {
+  const { parseMapText } = require('../lib/map-import');
+  assert.throws(
+    () => parseMapText('/csp-task /csp-task'),
+    /path-only pattern needs a host/i,
+  );
+  assert.throws(
+    () => parseMapText('host/path not-a-marker'),
+    /operation must be/i,
+  );
+  assert.throws(
+    () => parseMapText('a b c'),
+    /expected 1 or 2 columns/i,
+  );
+});
+
 test('parseMapText rejects illegal lines with exit-style error', () => {
   const { parseMapText } = require('../lib/map-import');
   assert.throws(

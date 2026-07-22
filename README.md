@@ -90,7 +90,7 @@ Playwright 样板：[`examples/playwright-mox/`](./examples/playwright-mox/)。
 **按 rule 只 mock 一部分**（共享 `rules/`，不绑 project；对齐 Whistle）：
 
 ```bash
-# rules/*.json stub 包，或同名 *.txt Whistle 两列 map（同名优先 .json）
+# rules/*.json stub 包，或同名 *.txt Whistle-like map（单列 host/path 即可；同名优先 .json）
 mox start --name=tower --rules=csp-trade
 mox start --rules=csp-trade,csp-tasks   # 逗号/空格多值 merge；找不到的名字跳过
 mox start --name=tower --rules jian-h5 xrk
@@ -173,7 +173,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | `init` | 扫描项目，生成 catalog（静默 domain-draft + CRUD Store 绑定） |
 | `start` / `stop` | 起停全局 mock+proxy；start 默认 reset Store；stop 打印 journal 摘要 |
 | `rules list\|use\|save` | 共享 rule：`.json` stub / `.txt` Whistle map；多值 merge |
-| `map import <file>` | Whistle 两列 Map → selective + allowlist + 增量 proxy-rules |
+| `map import <file>` | Whistle-like map pattern → selective + allowlist + 增量 proxy-rules |
 | `scenario` / `set-case` | 切场景或单个接口响应 |
 | `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
 | `device prepare` | ADB：设 `http_proxy`、push CA、打印 WebView mitm-check |

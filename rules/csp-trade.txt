@@ -1,13 +1,14 @@
-# Whistle-like map: remote → local mock
+# Whistle-like map pattern (P0): host/path → local mock
 # Use: mox start --rules=csp-trade
+# Optional 2nd column: /path or http://127.0.0.1/… (marker only)
 
-https://jian-j.guazi-cloud.com/csp-task/external/trade/appoint/getTradeAppointList http://127.0.0.1/csp-task/external/trade/appoint/getTradeAppointList
-https://jian-j.guazi-cloud.com/csp-task/external/trade/appoint/getTradeAppointDetail http://127.0.0.1/csp-task/external/trade/appoint/getTradeAppointDetail
-https://jian-j.guazi-cloud.com/csp-task/external/buy/in/process/changeTradeSource http://127.0.0.1/csp-task/external/buy/in/process/changeTradeSource
-https://csp-order-api.guazi-cloud.com/generalBSign/contractDetail http://127.0.0.1/csp-order-api/generalBSign/contractDetail
-https://csp-order-api.guazi-cloud.com/generalBSign/submitPurchaseReverseInvoice http://127.0.0.1/csp-order-api/generalBSign/submitPurchaseReverseInvoice
-https://csp-order-api.guazi-cloud.com/generalBSign/getUserCheckInfo http://127.0.0.1/csp-order-api/generalBSign/getUserCheckInfo
-https://jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/query http://127.0.0.1/csp-delivery/external/delivery/material/query
-https://jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/audit http://127.0.0.1/csp-delivery/external/delivery/material/audit
-https://jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/config http://127.0.0.1/csp-delivery/external/delivery/material/config
-https://jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/business/status http://127.0.0.1/csp-delivery/external/delivery/material/business/status
+jian-j.guazi-cloud.com/csp-task/external/trade/appoint/getTradeAppointList
+jian-j.guazi-cloud.com/csp-task/external/trade/appoint/getTradeAppointDetail
+jian-j.guazi-cloud.com/csp-task/external/buy/in/process/changeTradeSource
+csp-order-api.guazi-cloud.com/generalBSign/contractDetail
+csp-order-api.guazi-cloud.com/generalBSign/submitPurchaseReverseInvoice
+csp-order-api.guazi-cloud.com/generalBSign/getUserCheckInfo
+jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/query
+jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/audit
+jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/config
+jian-j.guazi-cloud.com/csp-delivery/external/delivery/material/business/status

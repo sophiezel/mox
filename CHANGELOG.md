@@ -9,9 +9,10 @@
 - `mox quality-gate`：提测门禁（空/TRACE_EMPTY → exit 1；写 `.data/reports/quality-gate-*.json`）。零溢出口径 = gate exit 0。
 - `proxy.captureMitmHosts`：`capture-open` 下对名单 host 做 MITM（无需 path rule）；`map import` 自动并入。
 - `serveCaptureIfEmpty`（默认关）：空 stub 可只读回放合格 capture，不写合同 / 不 `captureMerge`。
-- `mox map import <file>`：Whistle 两列 Map → `trafficMode=selective` + allowlist + 增量 `proxy-rules`；`127.0.0.1` 表示走本地 mock。
+- `mox map import <file>`：Whistle pattern 子集 → `trafficMode=selective` + allowlist + 增量 `proxy-rules`；支持单列 `host/path`；可选第二列 `/path` 或 `http(s)://…` 仅标记本地 mock；拒绝纯 path 无 host。
 - `--rules` 同样接受 `rules/<name>.txt` Whistle map（与 `.json` stub 包并列；同名优先 `.json`），启动即可，不必先 `map import`。
 - `--rules=a,b`（或空格多值）merge 多个 rule；找不到的 keyword 跳过，不中断启动。
+- `matchRule` pathPrefix 对齐 Whistle `/` 边界（`/v1` 不匹配 `/v1xxx`）。
 - Upstream failure journal：MITM 透传连接失败与 HTTP≥400 追加 `.data/reports/upstream-failures.jsonl`（不 merge 合同）。
 - Playwright 样板：`examples/playwright-mox/`。
 

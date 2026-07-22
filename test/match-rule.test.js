@@ -46,11 +46,20 @@ test('path prefix /v1 matches /v1/foo (wildcard-method rule)', () => {
   assert.ok(matchRule(rules, 'api.example.com', '/v1/foo', 'GET'));
 });
 
-test('prefix is a string prefix (documented behavior): /v1 also matches /v1users via rule c', () => {
-  // matchRule uses startsWith(prefix) — /v1users starts with /v1, so rule c matches.
-  // This documents the current semantics; stricter boundary matching is a P1 backlog item.
+test('Whistle / boundary: /v1 does not match /v1users', () => {
   const r = matchRule(rules, 'api.example.com', '/v1users', 'GET');
-  assert.equal(r.id, 'c');
+  assert.equal(r, null);
+});
+
+test('pathPrefix / matches any path', () => {
+  const root = [
+    { id: 'root', host: 'api.example.com', pathPrefix: '/', methods: ['GET'] },
+  ];
+  assert.equal(
+    matchRule(root, 'api.example.com', '/anything', 'GET').id,
+    'root',
+  );
+  assert.equal(matchRule(root, 'api.example.com', '/', 'GET').id, 'root');
 });
 
 test('empty rules returns null', () => {
