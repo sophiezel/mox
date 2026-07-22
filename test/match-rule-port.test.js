@@ -84,6 +84,10 @@ test('P5: parseAuthority splits host:port; defaultPortForScheme', () => {
     hostname: 'api.example.com',
     port: null,
   });
+  assert.deepEqual(parseAuthority('[2409:8c1e:75b0:1120::2d]:8080'), {
+    hostname: '[2409:8c1e:75b0:1120::2d]',
+    port: 8080,
+  });
   assert.equal(defaultPortForScheme('https:'), 443);
   assert.equal(defaultPortForScheme('http:'), 80);
 });

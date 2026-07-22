@@ -169,6 +169,47 @@ test('CONNECT on LAN bind denied without allowOpenProxy', async () => {
   }
 });
 
+test('CONNECT IPv6 literal parses port (no ERR_SOCKET_BAD_PORT crash)', async () => {
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: 'http://127.0.0.1:9',
+    rules: [],
+    missPolicy: 'passthrough',
+    allowOpenProxy: true,
+    passthroughHosts: [],
+  });
+  let uncaught = null;
+  const onUncaught = (err) => {
+    uncaught = err;
+  };
+  process.on('uncaughtException', onUncaught);
+  try {
+    await new Promise((resolve) => {
+      const sock = net.connect(proxy.port, '127.0.0.1', () => {
+        sock.write(
+          'CONNECT [2409:8c1e:75b0:1120::2d]:8080 HTTP/1.1\r\nHost: [2409:8c1e:75b0:1120::2d]:8080\r\n\r\n',
+        );
+      });
+      sock.on('data', () => {
+        sock.end();
+        resolve();
+      });
+      sock.on('error', () => resolve());
+      sock.on('close', () => resolve());
+      setTimeout(resolve, 1500);
+    });
+    assert.equal(
+      uncaught,
+      null,
+      uncaught ? uncaught.message : '',
+    );
+  } finally {
+    process.off('uncaughtException', onUncaught);
+    await proxy.close();
+  }
+});
+
 test('CONNECT MITM OPTIONS preflight returns CORS for localhost origin', async () => {
   const { createMitmCa } = require('../lib/mitm-ca');
   const tls = require('tls');
@@ -447,6 +488,7 @@ test('GET /mox/ca.cer serves DER CA; /__mox__/ alias still works', async () => {
             resolve({
               status: r.statusCode,
               type: r.headers['content-type'],
+              disposition: r.headers['content-disposition'],
               body: Buffer.concat(chunks),
             }),
           );
@@ -457,12 +499,21 @@ test('GET /mox/ca.cer serves DER CA; /__mox__/ alias still works', async () => {
   try {
     const res = await getCa('/mox/ca.cer');
     assert.equal(res.status, 200);
-    assert.match(String(res.type), /pkix-cert|octet|x-x509/i);
+    assert.match(String(res.type), /pkix-cert/i);
+    assert.match(
+      String(res.disposition || ''),
+      /mox-rootCA\.cer/i,
+    );
     assert.ok(res.body.length > 100);
     assert.doesNotMatch(res.body.toString('utf8'), /BEGIN CERTIFICATE/);
     const alias = await getCa('/__mox__/ca.cer');
     assert.equal(alias.status, 200);
     assert.equal(alias.body.length, res.body.length);
+
+    const crt = await getCa('/mox/ca.crt');
+    assert.equal(crt.status, 200);
+    assert.match(String(crt.type), /x-x509-ca-cert/i);
+    assert.match(String(crt.disposition || ''), /mox-rootCA\.crt/i);
 
     // Absolute-form (as phone Wi‑Fi proxy clients send)
     const abs = await new Promise((resolve, reject) => {
@@ -625,5 +676,176 @@ test('captureScope=catalog drops uncovered host misses', async () => {
     await proxy.close();
     await new Promise((r) => upstream.close(r));
     fs.rmSync(capturesDir, { recursive: true, force: true });
+  }
+});
+
+test('CONNECT Cronet UA forces tunnel even for catalog hosts', async () => {
+  const upstream = net.createServer((sock) => sock.end());
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const upPort = upstream.address().port;
+
+  const originalLookup = dns.lookup;
+  dns.lookup = (hostname, options, callback) => {
+    const cb = typeof options === 'function' ? options : callback;
+    const opts = typeof options === 'function' ? {} : options || {};
+    if (hostname === 'svc.example.com') {
+      if (opts.all) {
+        return process.nextTick(() =>
+          cb(null, [{ address: '127.0.0.1', family: 4 }]),
+        );
+      }
+      return process.nextTick(() => cb(null, '127.0.0.1', 4));
+    }
+    return originalLookup.call(dns, hostname, options, callback);
+  };
+
+  let mitmCalls = 0;
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: 'http://127.0.0.1:9',
+    rules: [
+      {
+        id: 'GET svc/api/x',
+        hosts: ['svc.example.com'],
+        pathPrefix: '/api/x',
+        methods: ['GET'],
+      },
+    ],
+    missPolicy: 'passthrough',
+    allowOpenProxy: false,
+    mitm: {
+      enabled: true,
+      getSecureContext() {
+        mitmCalls += 1;
+        throw new Error('must-not-mitm-cronet');
+      },
+    },
+  });
+  try {
+    const status = await new Promise((resolve, reject) => {
+      const sock = net.connect(proxy.port, '127.0.0.1', () => {
+        sock.write(
+          `CONNECT svc.example.com:${upPort} HTTP/1.1\r\n` +
+            `Host: svc.example.com:${upPort}\r\n` +
+            'User-Agent: Cronet/119.0.6045.163\r\n\r\n',
+        );
+      });
+      let buf = '';
+      sock.on('data', (c) => {
+        buf += c.toString('utf8');
+        if (buf.includes('\r\n\r\n')) {
+          sock.end();
+          resolve(buf);
+        }
+      });
+      sock.on('error', reject);
+      setTimeout(() => reject(new Error(`timeout buf=${buf}`)), 3000);
+    });
+    assert.equal(mitmCalls, 0);
+    assert.match(status, /200 Connection Established/);
+    assert.doesNotMatch(status, /502|403/);
+  } finally {
+    dns.lookup = originalLookup;
+    await proxy.close();
+    await new Promise((r) => upstream.close(r));
+  }
+});
+
+test('MITM bridge /__mox_mitm_check returns ok JSON with fingerprint', async () => {
+  const prev = process.env.MOX_MITM_DIR;
+  const dir = require('fs').mkdtempSync(
+    require('path').join(require('os').tmpdir(), 'mox-mitm-proxy-'),
+  );
+  process.env.MOX_MITM_DIR = dir;
+  try {
+    const { createMitmCa, caFingerprintShort, ensureCa } = require('../lib/mitm-ca');
+    const tls = require('tls');
+    const { certPath } = ensureCa({ forceRegen: true });
+    const fp = caFingerprintShort(certPath);
+    const ca = createMitmCa();
+    const proxy = await startProxyServer({
+      host: '127.0.0.1',
+      port: 0,
+      mockTarget: 'http://127.0.0.1:9',
+      rules: [
+        {
+          id: 'GET svc/api/q',
+          hosts: ['svc.example.com'],
+          pathPrefix: '/api/q',
+          methods: ['GET'],
+        },
+      ],
+      missPolicy: 'passthrough',
+      allowOpenProxy: false,
+      mitm: {
+        enabled: true,
+        getSecureContext: (h) => ca.getSecureContext(h),
+      },
+    });
+    try {
+      const raw = net.connect(proxy.port, '127.0.0.1');
+      await new Promise((r, j) => {
+        raw.once('connect', r);
+        raw.once('error', j);
+      });
+      raw.write(
+        'CONNECT svc.example.com:443 HTTP/1.1\r\nHost: svc.example.com:443\r\n\r\n',
+      );
+      await new Promise((resolve, reject) => {
+        let buf = '';
+        const onData = (c) => {
+          buf += c.toString('utf8');
+          if (buf.includes('\r\n\r\n')) {
+            raw.off('data', onData);
+            if (/200 Connection Established/i.test(buf)) resolve();
+            else reject(new Error(buf));
+          }
+        };
+        raw.on('data', onData);
+        raw.on('error', reject);
+        setTimeout(() => reject(new Error('CONNECT timeout')), 5000);
+      });
+
+      const tlsSock = tls.connect({
+        socket: raw,
+        servername: 'svc.example.com',
+        rejectUnauthorized: false,
+      });
+      await new Promise((r, j) => {
+        tlsSock.once('secureConnect', r);
+        tlsSock.once('error', j);
+      });
+
+      tlsSock.write(
+        'GET /__mox_mitm_check HTTP/1.1\r\nHost: svc.example.com\r\n\r\n',
+      );
+      const resBuf = await new Promise((resolve, reject) => {
+        let buf = '';
+        tlsSock.on('data', (c) => {
+          buf += c.toString('utf8');
+          if (buf.includes('\r\n\r\n') && buf.includes('{')) resolve(buf);
+        });
+        tlsSock.on('error', reject);
+        setTimeout(() => reject(new Error(`mitm-check timeout buf=${buf}`)), 5000);
+      });
+      assert.match(resBuf, /HTTP\/1\.1 200/);
+      const jsonStart = resBuf.indexOf('{');
+      const body = JSON.parse(resBuf.slice(jsonStart));
+      assert.equal(body.ok, true);
+      assert.equal(body.fingerprintShort, fp);
+      assert.equal(body.host, 'svc.example.com');
+      tlsSock.end();
+    } finally {
+      await proxy.close();
+    }
+  } finally {
+    if (prev === undefined) delete process.env.MOX_MITM_DIR;
+    else process.env.MOX_MITM_DIR = prev;
+    try {
+      require('fs').rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });

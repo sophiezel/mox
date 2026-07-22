@@ -68,27 +68,31 @@ mox start
 4. 手机打开接入页 `http://<LAN>:<port>/mox/`（或扫终端内联图 / PNG 文件）：
    - **先装 CA**：页内 QR / 按钮 → `/mox/ca.cer`
    - **再设代理**：选手动填 `IP:port`，或 Wi‑Fi「自动/PAC」扫码/粘贴 `/mox/proxy.pac`（比手敲 IP:port 稳）
-5. **CA 信任**（MITM 默认开启，电脑与手机同一份 CA）：
+5. **CA 信任**（MITM 默认开启；根证书在本机 `~/.mox/certs`，跨项目稳定，一般不随 `mox start` 轮换）：
    - **iOS**：安装描述文件 → **设置 → 通用 → 关于本机 → 证书信任设置** → 对 `mox Local MITM CA` 打开完全信任
-   - **Android**：设置 → 安全 → 安装证书 → CA；注意许多 App/WebView **不信任用户 CA**
+   - **Android**：设置 → 安全 → **从存储设备安装** → CA 证书（不要指望浏览器内「直接安装」）
+   - **自证（以它为准，不以业务页绿盾为准）**：设好代理后，用手机打开任一 **catalog HTTPS 域名** 的 `https://<host>/__mox_mitm_check`，应返回 `{"ok":true,"fingerprintShort":"…"}`。业务页（如未进 catalog 的 ping-fe）可能透传真实证书，绿盾 ≠ MITM CA 已生效。
+   - 仅当显式 `MOX_FORCE_REGEN_CA=1` / `mox ca rotate` 后才需删旧证重装；日常指纹不变。
 6. 手机 WebView 打开 H5，请求经 mox → mock / 透传
 
-已开代理时仍可用绝对 URL 下 CA（pathname 解析兼容）。电脑首次 `mox start` 会自动把 CA 写入 System.keychain（一次管理员密码）；重试用 `mox trust-ca`。
+已开代理时仍可用绝对 URL 下 CA（pathname 解析兼容）。电脑首次 `mox start` 会自动把 CA 写入 System.keychain（一次管理员密码）；重试用 `mox trust-ca`。单测用 `MOX_MITM_DIR` 临时目录，不会改写 `~/.mox/certs`。
 
 ### 安全提示
 
 - **仅信任局域网，勿在公共 Wi‑Fi 使用默认 LAN 绑定**
-- `--no-open-proxy`：`missPolicy` 强制 `reject`，CONNECT 默认拒绝（防开放代理 / SSRF）
+- `--no-open-proxy`：`missPolicy` 强制 `reject`，CONNECT 默认拒绝（防开放代理 / SSRF）；**Cronet UA** 对 catalog host 仍强制 tunnel（对齐 Whistle，不 MITM）
 - 桌面-only：`--proxy-host=127.0.0.1`
 
 ## HTTPS 边界
 
 | 模式 | 行为 |
 |------|------|
-| 默认 MITM | catalog `hosts[]` → `connect-mitm`；电脑系统信任 CA；真机装 `/mox/ca.cer` |
+| 默认 MITM | catalog `hosts[]` → `connect-mitm`；根 CA `~/.mox/certs/root.{key,crt}`；真机装 `/mox/ca.cer`（`mox-rootCA.cer`） |
+| 自证 | MITM 桥 `GET /__mox_mitm_check`（或 `/mox/mitm-check`）→ `ok` + 指纹 |
+| Cronet | UA 含 `Cronet` → 不 MITM，强制 tunnel |
 | `--mitm=0` | 本机绑定下未覆盖 host CONNECT 隧道；catalog 不改写 |
 | CONNECT 目标为 loopback | **一律拒绝**（`connect-deny-loopback`） |
-| LAN + `--no-open-proxy` | CONNECT 默认拒绝（仅 `passthroughHosts`；loopback 目标仍拒绝） |
+| LAN + `--no-open-proxy` | CONNECT 默认拒绝（仅 `passthroughHosts`；Cronet catalog 仍 tunnel；loopback 目标仍拒绝） |
 
 生产 H5 几乎全是 HTTPS——真机要 mock 须安装 CA（或 HTTP 调试域）。
 ## CORS / Hybrid WebView

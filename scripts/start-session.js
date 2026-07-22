@@ -340,7 +340,15 @@ async function startSession(opts = {}) {
         getSecureContext: (hostname) => ca.getSecureContext(hostname),
         caCertPath: ca.caCertPath,
       };
+      const {
+        caFingerprintShort,
+      } = require('../lib/mitm-ca');
+      const fp = caFingerprintShort(ca.caCertPath) || '';
       console.log(`[mox] HTTPS MITM enabled; CA: ${ca.caCertPath}`);
+      if (fp) console.log(`[mox] MITM CA fingerprint (sha256…): ${fp}…`);
+      console.log(
+        '[mox] phone trust check: open https://<catalog-host>/__mox_mitm_check (JSON ok:true) — do not use page green lock alone',
+      );
     }
     const statefulLoader = () => {
       const live = loadSession();

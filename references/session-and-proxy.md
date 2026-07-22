@@ -104,7 +104,7 @@ HTTPS MITM（**默认开启**；`--mitm=0` 关闭）：
 
 - 首次 `mox start`：若尚未信任，自动 `installTrustedCa`（一次管理员密码 → System.keychain）
 - 之后 `mox start`：只检查信任，不改钥匙串
-- 真机：打开启动日志中的 `http://<真实LAN>:<proxyPort>/mox/ca.cer` 安装同一 CA
+- 真机：打开启动日志中的 `http://<真实LAN>:<proxyPort>/mox/ca.cer` 安装同一 CA；用 catalog host 的 `/__mox_mitm_check` 自证（不以业务页绿盾为准）
 - 修复入口：`mox trust-ca`
 - 代理侧对 **CONNECT 目标为 loopback** 一律拒绝
 

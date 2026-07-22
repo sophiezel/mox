@@ -37,11 +37,15 @@ test('buildDeviceHubHtml embeds urls and optional QR', () => {
     urls,
     caQrDataUrl: 'data:image/png;base64,aaa',
     pacQrDataUrl: 'data:image/png;base64,bbb',
+    caFingerprint: 'A552CE4B4C8294DC',
   });
   assert.match(html, /192\.168\.1\.8:18999/);
   assert.match(html, /mox\/ca\.cer/);
   assert.match(html, /mox\/proxy\.pac/);
   assert.match(html, /data:image\/png;base64,aaa/);
+  assert.match(html, /A552CE4B4C8294DC/);
+  assert.match(html, /__mox_mitm_check/);
+  assert.match(html, /\.mox\/certs/);
 });
 
 test('qrDataUrl returns png data url', async () => {

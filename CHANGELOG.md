@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Changed
+- **MITM 根证书迁至 `~/.mox/certs/root.{key,crt}`**（Whistle 同款用户级持久化）；有效则不重签；可从项目 `.data/mitm` **复制迁移**（不换指纹）。测例仅用 `MOX_MITM_DIR`。
+- CA 下载对齐 Whistle：`/mox/ca.cer` → `application/pkix-cert` + `mox-rootCA.cer`；`/mox/ca.crt` → `application/x-x509-ca-cert`。
+- 叶子证书按根指纹分桶 `hosts/<fp>/`；根轮换清叶子与 SecureContext 缓存。
+- CONNECT：UA 含 `Cronet` 时强制 tunnel（不 MITM），日志 `connect-tunnel-cronet`。
+- 真机自证：MITM 桥 `GET /__mox_mitm_check`（或 `/mox/mitm-check`）返回 `ok`+指纹；hub/启动提示以它为准，不以业务页绿盾为准。
+
+### Changed
 - **默认开启 MITM**；日常 `mox start`（默认打开 `http://127.0.0.1:8000`）；`--mitm=0` 关闭。
 - 去掉一切 Chromium `ignore-certificate*` / `spki-list`；依赖 macOS trust settings（login / System / Keychain Always Trust）。
 - 首次 `mox start` 未信任时自动安装 CA（login.keychain → admin System.keychain → 钥匙串「始终信任」）；已信任则零钥匙串写入。Cursor/无 GUI 终端若失败，改在 Terminal.app 跑 `mox trust-ca`。
@@ -14,9 +21,16 @@
 
 ### Fixed
 - HTTPS CONNECT：按 catalog `hosts[]` 覆盖做 MITM；本机绑定下未覆盖 host 自动隧道透传。
+- CONNECT：IPv6 权威名（`[addr]:port`）用 `parseAuthority` 解析，避免 `split(':')` 得到 NaN port 把进程打崩。
 - Chromium bypass 为显式 `127.0.0.1;localhost;::1`；CONNECT loopback 拒绝。
 - MITM CORS：OPTIONS 预检在 MITM 桥接处理；**默认 `reflectOrigin` 回显任意 Origin**（远程 H5 不再因白名单丢 ACAO）；`reflectOrigin: false` 退回 localhost/`extraOrigins`。
 - MITM CA：生成时补齐 `keyUsage=keyCertSign`（对齐 Whistle/mitmproxy）；缺扩展的旧 CA 会自动重签。Android「用户」凭据下此前会拒链（不是用户 CA 不能用）。MITM TLS 强制 ALPN `http/1.1`。
+- MITM CA：`openssl` 解析走 PATH + Homebrew/系统绝对路径；重签失败回滚 `*.bak`；**CA 重签后 `mox start` 自动再跑 trust（不再因同名 CN 误判已信任）**。
+- `/mox/ca.cer`：PEM→DER 用 Node `crypto`（不依赖 openssl）；openssl 不可用时保留已有 CA，避免误删后下载 503。
+- **修复** `ensureCaCerFile` 在 `root.crt` 布局下误把根证写成 DER（Keychain `.cer` 现写为同目录 `root.cer`）；启动时若发现 DER 会规范回 PEM（指纹不变）。
+- 真机 hub / 启动提示展示 CA 指纹；重签后需删旧「mox Local MITM CA」再装当前证书（否则页面能开、接口 Network Error）。
+- **CA 默认不再因 weak 检测自动重签**（防指纹漂移）；显式 `MOX_FORCE_REGEN_CA=1` 才轮换。`/mox/ca.cer` 用 `application/x-x509-ca-cert` 内联，方便 Android 证书安装器；`/mox/ca-info` 返回指纹。
+- 单测 `forceRegen` 改走 `MOX_MITM_DIR` 临时目录，**禁止再改写 `~/.mox/certs`（及旧 `.data/mitm`）生产根**。
 - `Ctrl+C` 快速退出（`closeAllConnections` + 超时）。
 
 ### Added

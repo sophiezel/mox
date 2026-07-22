@@ -7,11 +7,12 @@ const path = require('path');
 const net = require('net');
 const tls = require('tls');
 const { applyCorsHeaders, handleOptions } = require('../../lib/cors');
-const {
+  const {
   matchRule,
   matchPassthroughHost,
   hostCoveredByRules,
   defaultPortForScheme,
+  parseAuthority,
 } = require('../../lib/match-rule');
 const {
   shouldMock,
@@ -336,7 +337,19 @@ function startProxyServer(opts) {
             urls.caCer ? qrDataUrl(urls.caCer) : null,
             urls.pac ? qrDataUrl(urls.pac) : null,
           ]);
-          const html = buildDeviceHubHtml({ urls, caQrDataUrl, pacQrDataUrl });
+          let caFingerprint = null;
+          try {
+            const { ensureCa, caFingerprintShort } = require('../../lib/mitm-ca');
+            caFingerprint = caFingerprintShort(ensureCa().certPath) || null;
+          } catch {
+            /* hub still useful without fingerprint */
+          }
+          const html = buildDeviceHubHtml({
+            urls,
+            caQrDataUrl,
+            pacQrDataUrl,
+            caFingerprint,
+          });
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
@@ -376,20 +389,54 @@ function startProxyServer(opts) {
       if (
         req.method === 'GET' &&
         (pathOnly === '/mox/ca.cer' ||
+          pathOnly === '/mox/ca.crt' ||
           pathOnly === '/mox/ca.pem' ||
           pathOnly === '/mox/ca.cert.pem' ||
+          pathOnly === '/mox/ca-info' ||
+          pathOnly === '/mox/ca-info.json' ||
           pathOnly === '/__mox__/ca.cer' ||
+          pathOnly === '/__mox__/ca.crt' ||
           pathOnly === '/__mox__/ca.pem' ||
           pathOnly === '/__mox__/ca.cert.pem')
       ) {
         try {
-          const { readCaDownloadFiles } = require('../../lib/mitm-ca');
-          const { pem, der } = readCaDownloadFiles();
-          if (pathOnly.endsWith('.cer')) {
+          const {
+            readCaDownloadFiles,
+            caFingerprintShort,
+            ensureCa,
+          } = require('../../lib/mitm-ca');
+          if (
+            pathOnly === '/mox/ca-info' ||
+            pathOnly === '/mox/ca-info.json'
+          ) {
+            const { certPath } = ensureCa();
+            const body = JSON.stringify({
+              commonName: 'mox Local MITM CA',
+              fingerprintShort: caFingerprintShort(certPath),
+              download: '/mox/ca.cer',
+            });
             res.writeHead(200, {
-              'Content-Type': 'application/pkix-cert',
-              'Content-Disposition': 'attachment; filename="mox-ca.cer"',
+              'Content-Type': 'application/json; charset=utf-8',
+              'Cache-Control': 'no-store',
+            });
+            res.end(body);
+            logAccess({ action: 'mox-ca-info', method: 'GET', url: pathOnly });
+            return;
+          }
+          const { pem, der } = readCaDownloadFiles();
+          if (pathOnly.endsWith('.cer') || pathOnly.endsWith('.crt')) {
+            // Whistle: .cer → application/pkix-cert; .crt → application/x-x509-ca-cert
+            const type = pathOnly.endsWith('.crt')
+              ? 'application/x-x509-ca-cert'
+              : 'application/pkix-cert';
+            const filename = pathOnly.endsWith('.crt')
+              ? 'mox-rootCA.crt'
+              : 'mox-rootCA.cer';
+            res.writeHead(200, {
+              'Content-Type': type,
+              'Content-Disposition': `attachment; filename="${filename}"`,
               'Content-Length': der.length,
+              'Cache-Control': 'no-store',
             });
             res.end(der);
           } else {
@@ -397,6 +444,7 @@ function startProxyServer(opts) {
               'Content-Type': 'application/x-pem-file',
               'Content-Disposition': 'attachment; filename="mox-ca.pem"',
               'Content-Length': pem.length,
+              'Cache-Control': 'no-store',
             });
             res.end(pem);
           }
@@ -721,8 +769,25 @@ function startProxyServer(opts) {
 
   // CONNECT: tunnel only when allowed; optional MITM for matched HTTPS hosts
   server.on('connect', (req, clientSocket, head) => {
-    const [hostname, portStr] = (req.url || '').split(':');
-    const portNum = Number(portStr || 443);
+    const parsed = parseAuthority(req.url || '');
+    // net/tls want bare IPv6 (no brackets); catalogs / URL.hostname are bare too.
+    const hostname = String(parsed.hostname || '').replace(/^\[|\]$/g, '');
+    const portNum =
+      parsed.port != null ? Number(parsed.port) : 443;
+    if (
+      !Number.isInteger(portNum) ||
+      portNum < 0 ||
+      portNum > 65535
+    ) {
+      clientSocket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      clientSocket.end();
+      logAccess({
+        action: 'connect-bad-port',
+        method: 'CONNECT',
+        url: req.url,
+      });
+      return;
+    }
 
     // Local HTTP(S) origins must bypass the proxy in the browser — never CONNECT-tunnel them.
     if (isLoopbackHostname(hostname)) {
@@ -741,9 +806,13 @@ function startProxyServer(opts) {
     }
 
     const mitmEnabled = Boolean(mitm?.enabled && typeof mitm.getSecureContext === 'function');
+    // Whistle: Cronet often rejects user CAs — skip MITM and tunnel.
+    const ua = String(req.headers['user-agent'] || '');
+    const isCronet = /\bCronet\b/i.test(ua);
+    const catalogHit = hostCoveredByRules(activeRules, hostname, portNum);
     // Host coverage only — pathPrefix rules never match CONNECT probe path "/"
-    const ruleHit =
-      mitmEnabled && hostCoveredByRules(activeRules, hostname, portNum);
+    const ruleHit = mitmEnabled && !isCronet && catalogHit;
+    const forceCronetTunnel = Boolean(isCronet && mitmEnabled && catalogHit);
 
     if (mitmEnabled && ruleHit) {
       try {
@@ -790,16 +859,33 @@ function startProxyServer(opts) {
       }
     }
 
-    if (allowConnectTunnel(hostname, portNum)) {
-      const upstream = net.connect(portNum, hostname, () => {
-        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-        if (head && head.length) upstream.write(head);
-        upstream.pipe(clientSocket);
-        clientSocket.pipe(upstream);
-      });
+    if (allowConnectTunnel(hostname, portNum) || forceCronetTunnel) {
+      let upstream;
+      try {
+        upstream = net.connect(portNum, hostname, () => {
+          clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          if (head && head.length) upstream.write(head);
+          upstream.pipe(clientSocket);
+          clientSocket.pipe(upstream);
+        });
+      } catch (err) {
+        clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+        clientSocket.end();
+        logAccess({
+          action: 'connect-tunnel-fail',
+          method: 'CONNECT',
+          url: req.url,
+          error: err && err.message,
+        });
+        return;
+      }
       upstream.on('error', () => clientSocket.end());
       clientSocket.on('error', () => upstream.end());
-      logAccess({ action: 'connect-tunnel', method: 'CONNECT', url: req.url });
+      logAccess({
+        action: forceCronetTunnel ? 'connect-tunnel-cronet' : 'connect-tunnel',
+        method: 'CONNECT',
+        url: req.url,
+      });
       return;
     }
 
@@ -823,6 +909,40 @@ function startProxyServer(opts) {
         logAccess({
           action: 'mitm-options',
           method: 'OPTIONS',
+          url: `https://${hostname}${urlPath}`,
+        });
+        return;
+      }
+
+      // Objective CA trust check (not ping-fe green lock).
+      const mitmCheckPath = urlPath.split('?')[0];
+      if (
+        method === 'GET' &&
+        (mitmCheckPath === '/__mox_mitm_check' ||
+          mitmCheckPath === '/mox/mitm-check')
+      ) {
+        let fp = '';
+        try {
+          const { caFingerprintShort, ensureCa } = require('../../lib/mitm-ca');
+          fp = caFingerprintShort(ensureCa().certPath) || '';
+        } catch {
+          /* ignore */
+        }
+        const body = JSON.stringify({
+          ok: true,
+          fingerprintShort: fp,
+          host: hostname,
+        });
+        applyCorsHeaders(req, res, cors);
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Length': Buffer.byteLength(body),
+        });
+        res.end(body);
+        logAccess({
+          action: 'mitm-check',
+          method: 'GET',
           url: `https://${hostname}${urlPath}`,
         });
         return;

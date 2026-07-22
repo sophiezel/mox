@@ -103,7 +103,8 @@ rules/                         共享 rule 包（可 git；stub 级标签）
   audit/                       changelog.jsonl + proxy-access.jsonl
   scenarios/                   全局 scenario 文件
   exports/                     export-msw 等
-  mitm/                        可选 HTTPS MITM CA
+  mitm/                        遗留项目级 CA 目录（启动时若存在可迁移复制到 ~/.mox/certs）
+  # 默认根证书：~/.mox/certs/root.{key,crt}
   chrome-profiles/<label>/     仅 autoLaunch Chrome 时创建
   services/<upstreamId>/       Service Catalog（唯一真源）
     mocks/<METHOD>/<path>/index.js
