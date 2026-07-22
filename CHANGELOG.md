@@ -7,7 +7,7 @@
 - 去掉一切 Chromium `ignore-certificate*` / `spki-list`；依赖 macOS trust settings（login / System / Keychain Always Trust）。
 - 首次 `mox start` 未信任时自动安装 CA（login.keychain → admin System.keychain → 钥匙串「始终信任」）；已信任则零钥匙串写入。Cursor/无 GUI 终端若失败，改在 Terminal.app 跑 `mox trust-ca`。
 - 真机 CA 下载：`GET /mox/ca.cer` / `ca.pem`（`/__mox__/` 仍为别名）。
-- **真机扫码接入**：`GET /mox/` 落地页（CA QR + PAC QR + `IP:port`）；`GET /mox/proxy.pac`；`mox start` 打印 hub/CA/PAC 与终端 ASCII QR。诚实标注：系统无法跨端「扫一码写死手动代理」。
+- **真机扫码接入**：`GET /mox/` 落地页（CA QR + PAC QR + `IP:port`）；`GET /mox/proxy.pac`；`mox start` 经 iTerm2 协议在终端内联正方形 PNG（并落盘 `.data/device-hub-qr.png`）。Cursor/VS Code 需 `terminal.integrated.enableImages`。诚实标注：系统无法跨端「扫一码写死手动代理」。
 - **Whistle-like 默认**：`proxy.host=0.0.0.0` + `allowOpenProxy=true`；收紧用 `--proxy-host=127.0.0.1` / `--no-open-proxy`。
 - **Capture 噪声门闸**：默认 `captureScope=catalog`（只录规则已覆盖 host）+ 浏览器/CDN 噪声后缀永不落盘；全量摸底用 `captureScope=all`。
 - **Start 门禁**：端口占用识别本机 mox session 并提示 `mox stop`；启动 Chrome 前清理 profile session 恢复文件。不探测、不代替启动前端。

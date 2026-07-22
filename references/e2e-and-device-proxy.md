@@ -64,8 +64,8 @@ mox start
 # 收紧 LAN CONNECT：--no-open-proxy
 ```
 
-3. 启动日志打印 `Wi-Fi 代理`、`接入页`、`CA`、`PAC`，并输出 **一张接入页 ASCII 二维码**（用手机扫电脑屏即可）
-4. 手机打开接入页 `http://<LAN>:<port>/mox/`（或扫终端 QR）：
+3. 启动日志打印 `Wi-Fi 代理`、`接入页`、`CA`、`PAC`，并 **在终端内联显示正方形 PNG 扫码图**（iTerm2 协议；Cursor/VS Code 需 `terminal.integrated.enableImages: true`），同时落盘 `.data/device-hub-qr.png`
+4. 手机打开接入页 `http://<LAN>:<port>/mox/`（或扫终端内联图 / PNG 文件）：
    - **先装 CA**：页内 QR / 按钮 → `/mox/ca.cer`
    - **再设代理**：选手动填 `IP:port`，或 Wi‑Fi「自动/PAC」扫码/粘贴 `/mox/proxy.pac`（比手敲 IP:port 稳）
 5. **CA 信任**（MITM 默认开启，电脑与手机同一份 CA）：

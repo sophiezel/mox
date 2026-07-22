@@ -48,3 +48,48 @@ test('qrDataUrl returns png data url', async () => {
   const d = await qrDataUrl('http://10.0.0.1:18999/mox/');
   assert.match(d, /^data:image\/png;base64,/);
 });
+
+test('writeHubQrPng writes square png file', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { writeHubQrPng } = require('../lib/device-setup');
+  const out = path.join(os.tmpdir(), `mox-hub-qr-${Date.now()}.png`);
+  try {
+    const p = await writeHubQrPng('http://10.0.0.1:18999/mox/', out);
+    assert.equal(p, out);
+    assert.ok(fs.existsSync(out));
+    assert.ok(fs.statSync(out).size > 80);
+    // PNG magic
+    const buf = fs.readFileSync(out);
+    assert.equal(buf[0], 0x89);
+    assert.equal(buf[1], 0x50);
+  } finally {
+    try {
+      fs.unlinkSync(out);
+    } catch {
+      /* ignore */
+    }
+  }
+});
+
+test('writeInlineTerminalImage emits OSC 1337 payload', () => {
+  const { writeInlineTerminalImage } = require('../lib/device-setup');
+  const chunks = [];
+  const orig = process.stdout.write;
+  process.stdout.write = (c) => {
+    chunks.push(Buffer.isBuffer(c) ? c.toString('utf8') : String(c));
+    return true;
+  };
+  try {
+    const ok = writeInlineTerminalImage(Buffer.from([0x89, 0x50, 0x4e, 0x47]), {
+      widthCells: 12,
+    });
+    assert.equal(ok, true);
+    const out = chunks.join('');
+    assert.match(out, /\x1b\]1337;File=inline=1/);
+    assert.match(out, /width=12/);
+  } finally {
+    process.stdout.write = orig;
+  }
+});
