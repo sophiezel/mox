@@ -4,6 +4,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { resolveCase, pickCase, isDescriptor } = require('../../lib/case-resolve');
+const { emptyMockGate } = require('../../lib/empty-mock');
+const { normalizeProxyMode } = require('../../lib/capture-filter');
+const { findCaptureResponse } = require('../../lib/serve-capture-if-empty');
 
 /**
  * Ensure candidate path stays inside mocksRoot (no path traversal).
@@ -184,13 +187,29 @@ function clearHandlerCache() {
   handlerCache.clear();
 }
 
-function sendPlan(res, plan) {
+function sendPlan(res, plan, gateOpts = {}) {
   if (plan.fault === 'reset') {
     res.destroy();
     return;
   }
   if (plan.fault === 'hang') {
     // do not write anything; let client timeout
+    return;
+  }
+  const gated = emptyMockGate(plan, gateOpts);
+  if (gated.block) {
+    if (gateOpts.serveCaptureIfEmpty && gateOpts.capturesDir) {
+      const hit = findCaptureResponse(gateOpts.capturesDir, {
+        host: gateOpts.host,
+        path: gateOpts.path,
+        method: gateOpts.method,
+      });
+      if (hit) {
+        res.status(hit.status).json(hit.body);
+        return;
+      }
+    }
+    res.status(gated.status).json(gated.body);
     return;
   }
   const status = plan.httpStatus > 0 ? plan.httpStatus : 200;
@@ -201,8 +220,17 @@ function sendPlan(res, plan) {
   res.status(status).json(plan.body);
 }
 
-function createRouter({ mocksRoot, caseHeader, resolveMocksRoot = null }) {
+function createRouter({
+  mocksRoot,
+  caseHeader,
+  resolveMocksRoot = null,
+  mode = 'mock-lab',
+  serveCaptureIfEmpty = false,
+  capturesDir = null,
+}) {
   const router = express.Router();
+  const resolvedMode = normalizeProxyMode(mode);
+  const serveCap = Boolean(serveCaptureIfEmpty);
 
   const handler = async (req, res) => {
     const host = req.headers['x-forwarded-host'] || req.headers.host || '';
@@ -310,13 +338,23 @@ function createRouter({ mocksRoot, caseHeader, resolveMocksRoot = null }) {
         plan = resolveCase(mockCase, { response: result });
       }
 
+      const gateOpts = {
+        mode: resolvedMode,
+        serveCaptureIfEmpty: serveCap,
+        capturesDir,
+        host: String(host).split(':')[0],
+        path: req.path,
+        method: req.method,
+      };
       if (plan.delayMs && plan.delayMs > 0) {
         delayTimer = setTimeout(() => {
           delayTimer = null;
-          if (!res.headersSent && !res.writableEnded) sendPlan(res, plan);
+          if (!res.headersSent && !res.writableEnded) {
+            sendPlan(res, plan, gateOpts);
+          }
         }, plan.delayMs);
       } else {
-        sendPlan(res, plan);
+        sendPlan(res, plan, gateOpts);
       }
     } catch (err) {
       clearDelay();

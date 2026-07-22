@@ -34,7 +34,7 @@ mox help --all
 |------|------|------|
 | 端口占用 | `stop` 或换 `--mock-port` / `--proxy-port` | [L0#port-in-use](./guide-l0-getting-started.md#port-in-use) |
 | generate 报无 classify | `init` 或 `classify` | [L1#no-classify](./guide-l1-frontend-infer.md#no-classify) |
-| `--record` + `--traffic` 报错 | 二选一；或改用 `--rules` | [L2#traffic-flags](./guide-l2-runtime.md#traffic-flags) |
+| `--capture-open` + `--traffic` 报错 | 二选一；或改用 `--rules` | [L2#traffic-flags](./guide-l2-runtime.md#traffic-flags) |
 | 列表看不到刚创建的数据 | 确认 handler 已 materialize；勿在两次 start 间指望无 `--keep-state` 的内存 | [L4](./guide-l4-virtual-service.md) |
 | 想重绑 CRUD store | `materialize-service --force` | [L5](./guide-l5-backend-inference.md) |
 | 真机 HTTPS CERT 无效 | 手机装 `/mox/ca.cer` + 完全信任；电脑 `mox trust-ca` / 首次 start | [L2#device-proxy](./guide-l2-runtime.md#device-proxy) |

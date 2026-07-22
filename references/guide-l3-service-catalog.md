@@ -32,7 +32,8 @@
 ```bash
 mox start --name=svc-a --name=svc-b
 # 省略 --name = 挂载全部 services
-# stub 级标签（不是前端包名）：mox start --rules tower
+# stub 级标签（不是前端包名）：mox start --rules=tower
+# 也支持 Whistle .txt / 多值：mox start --rules=csp-trade,csp-tasks
 ```
 
 代理只有**一个**进程；规则按 stub 合并。

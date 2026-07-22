@@ -53,6 +53,9 @@ disable-model-invocation: true
 - [ ] CORS 默认 `reflectOrigin` 回显任意 Origin；严格白名单用 `reflectOrigin: false` + `extraOrigins`
 - [ ] soft miss：透传 + capture，不因单接口拖垮 session
 - [ ] **E2E 前显式 `scenario` / `set-scenario`**；勿只生成 success 就宣称可测异常路径
+- [ ] 提测前跑 `mox quality-gate`；**exit 0 才可宣称可提测**（零溢出口径 ≠ 字面 0 bug）
+- [ ] Hybrid：`--require-mitm-check=` 仅当 App 走系统代理；钉扎/Cronet 非目标
+- [ ] `--rules` 可用 `.json` / Whistle `.txt`；`--rules=a,b` merge，缺失跳过；`--capture-open` ≠ 全透传
 - [ ] `coverage.gaps` 非空时**不宣称 IO 完备**（含 `TRACE_EMPTY`）；需要真实值时显式 `merge` / `capture-merge`（以 capture 为准，非补洞）
 - [ ] 普通 `init`/`generate --force` **不得**静默覆盖 `usage+capture`；覆盖须 `--overwrite-capture`
 - [ ] **禁止创造响应字段**：键只来自用法或 capture；faker 只填值不增键
@@ -78,13 +81,16 @@ disable-model-invocation: true
 ```bash
 bash scripts/install.sh
 cd <frontend> && mox init [--task=ID] [--related-from=doc]
-mox start [--name=<upstreamId…>] [--rules kw…] [--task=ID]
+mox start [--name=<upstreamId…>] [--rules=a,b] [--task=ID]
 # 后台: mox start --detach
-mox scenario e2e-fault && mox merge
+mox scenario e2e-fault && mox quality-gate
 mox stop
 # 默认 MITM + 打开 http://127.0.0.1:8000；首次未信任 CA 弹一次系统密码
 # 关 MITM: --mitm=0   换打开页: --start-url=...
+# Whistle map: rules/<name>.txt 或 mox map import ./map.txt
+# 加宽落盘: --capture-open（≠ 全透传；全透传用 traffic all-passthrough）
 # 真机: 看启动日志 Wi-Fi 代理 / CA URL（/mox/ca.cer）；修复: mox trust-ca
+# Android 助手: mox device prepare --lan-ip=<LAN>
 # 仅本机: --proxy-host=127.0.0.1   收紧 LAN: --no-open-proxy
 # OpenAPI: mox import-openapi --from=./openapi.json
 ```

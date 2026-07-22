@@ -24,26 +24,38 @@ mox stop
 
 ```bash
 mox start --name=demo --rules my-pack
+mox start --rules=csp-trade,csp-tasks   # .json / Whistle .txt；缺失跳过
 # 或运行中：
 mox rules use my-pack
+mox map import ./whistle-map.txt
 ```
 
 <a id="traffic-flags"></a>
 
 ### 3. 流量 flag 边界
 
-- `--record` 与 `--traffic=` **互斥**
-- `--rules` 优先：与 `--record` 同用时仍是 selective，只把未命中规则的透传记入 captures
+- `--capture-open` 与 `--traffic=` **互斥**
+- `--rules` 优先：与 `--capture-open` 同用时仍是 selective，只把未命中规则的透传记入 captures
+- `--capture-open` ≠ 全透传；纯全透传用 `mox traffic all-passthrough`
 
 ```bash
 # 错：
-# mox start --record --traffic=all-mock
+# mox start --capture-open --traffic=all-mock
 # 对：
-mox start --name=demo --record
+mox start --name=demo --capture-open
 mox stop --auto-merge
 ```
 
-### 4. 真机代理
+### 4. 提测门禁
+
+```bash
+mox quality-gate
+# Hybrid：mox quality-gate --require-mitm-check=https://<host>/__mox_mitm_check
+```
+
+exit 0 = 可提测（零溢出口径）。见 [e2e-and-device-proxy.md](./e2e-and-device-proxy.md)。
+
+### 5. 真机代理
 
 <a id="device-proxy"></a>
 
@@ -51,6 +63,7 @@ mox stop --auto-merge
 mox start --name=demo
 # MITM 默认开；关：--mitm=0
 # 仅本机：--proxy-host=127.0.0.1
+# Android 助手：mox device prepare --lan-ip=<LAN>
 ```
 
 按日志填手机 Wi‑Fi 手动代理（真实 IP:port）。勿在公共 Wi‑Fi 使用默认 LAN 绑定。
@@ -60,7 +73,8 @@ mox start --name=demo
 ## 如何验收
 
 - [ ] `scenario e2e-fault` 后 smoke/请求能看到故障类 case
-- [ ] 说清主轨 `all-mock` vs 辅轨 `--record`
+- [ ] 说清主轨 `all-mock` vs 辅轨 `--capture-open`（加宽落盘）vs `traffic all-passthrough`（全透传）
+- [ ] `quality-gate` 能解释 exit 0 / 1
 - [ ] 真机或桌面代理至少走通一种
 
 ## 边界与下一层

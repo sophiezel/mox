@@ -75,10 +75,11 @@ Primary:
   mox scenario <name>
   mox smoke [--name=serviceId…] [--ci] [--cases=...] [--scenario=NAME]
   mox trust-ca [--open]
+  mox device prepare --lan-ip=<ip> [--proxy-port=18999]
 
 Optional (needs real upstream; not for E2E):
-  mox start --record [--name=serviceId…]
-  mox record | mock
+  mox start --capture-open [--name=serviceId…]
+  mox mock
   mox merge [--name=serviceId…]
 `;
 
@@ -93,8 +94,10 @@ Advanced / legacy (see references/guide-l6-advanced.md):
   mox set-case <apiId> <caseId>
   mox set-scenario <name>
   mox traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]
+  mox map import <file> [--save-as=name]
   mox capture-merge [...]
   mox list-empty [--gap=GAP] [--all] [--name=serviceId…]
+  mox quality-gate [--scenario=NAME] [--require-mitm-check=URL]
   mox import-openapi --from=<spec>
   mox export-msw [--out=path]
   mox audit [--task=ID] [--api=host/path]
@@ -108,9 +111,9 @@ Session security:
 
 Flags:
   --name=a --name=b    mount service ids (or --name=a,b); omit = all services
-  --rules kw1 kw2      selective mock; with --record still selective (record passthrough only)
+  --rules a,b / kw…    selective mock from rules/*.json or Whistle *.txt; comma/space multi merge; missing names skipped; with --capture-open still selective + capture-open
   --rules-dir=DIR      override rules directory (default: <pkg>/rules)
-  --record             alone: all-passthrough; with --rules: record passthrough only
+  --capture-open       proxy.mode=capture-open (widen MITM capture); pure all-passthrough: mox traffic all-passthrough
   --auto-merge         with stop: run capture-merge after stop
   --keep-state         with start: do not reset Virtual Service store / journal
   --detach             with start: spawn background session (survives shell exit); stop via mox stop
@@ -163,29 +166,29 @@ function hintForError(message) {
 }
 
 function resolveStartTraffic(f) {
-  const wantRecord = Boolean(f.record);
+  const wantCaptureOpen = Boolean(f['capture-open']);
   const wantTraffic = f.traffic != null && f.traffic !== false && f.traffic !== '';
   const wantRules =
     f.rules != null &&
     f.rules !== false &&
     !(Array.isArray(f.rules) && f.rules.length === 0);
-  if (wantRecord && wantTraffic) {
-    throw new Error('--record and --traffic= are mutually exclusive');
+  if (wantCaptureOpen && wantTraffic) {
+    throw new Error('--capture-open and --traffic= are mutually exclusive');
   }
-  // --rules wins over --record: stay selective; start-session enables recordMisses
+  // --rules wins: stay selective; start-session sets proxy.mode=capture-open when --capture-open
   if (wantRules) {
-    if (wantRecord) {
+    if (wantCaptureOpen) {
       console.log(
-        '[mox] --record with --rules: selective mock + record passthrough',
+        '[mox] --capture-open with --rules: selective mock + capture-open',
       );
     }
     return null;
   }
-  if (wantRecord) {
+  if (wantCaptureOpen) {
     console.log(
-      '[mox] mode=record (all-passthrough; optional fidelity upgrade — not for E2E)',
+      '[mox] mode=capture-open (MITM decrypt+capture; map/allowlist still mock; all-passthrough → mox traffic all-passthrough)',
     );
-    return 'all-passthrough';
+    return null;
   }
   return wantTraffic ? f.traffic : null;
 }
@@ -263,10 +266,6 @@ async function runSessionStart(f) {
 
   const { startSession } = require('../scripts/start-session');
   const traffic = resolveStartTraffic(f);
-  const wantRules =
-    f.rules != null &&
-    f.rules !== false &&
-    !(Array.isArray(f.rules) && f.rules.length === 0);
   await startSession({
     projectDir: process.cwd(),
     name: f.name,
@@ -295,7 +294,7 @@ async function runSessionStart(f) {
           ? true
           : undefined,
     recordMockHits: Boolean(f['record-mock-hits']),
-    record: Boolean(f.record) && wantRules,
+    captureOpen: Boolean(f['capture-open']),
     traffic,
     keepState: Boolean(f['keep-state']),
   });
@@ -482,6 +481,38 @@ async function main() {
     console.error('Usage: mox rules list|use <kw…>|save <name>');
     process.exit(1);
   }
+  if (cmd === 'map') {
+    const sub = rest[0];
+    if (sub === 'import') {
+      const file = rest[1] || f.from || f.file;
+      if (!file) {
+        console.error('Usage: mox map import <file>');
+        process.exit(1);
+      }
+      const { applyMapImport } = require('../lib/map-import');
+      try {
+        const out = applyMapImport(file, {
+          saveAs: f['save-as'] || 'map-import',
+          rulesDir: f['rules-dir'],
+        });
+        console.log(
+          `[mox] map import rows=${out.rows.length} stubs=${out.stubIds.length} hosts=${out.hosts.join(',')}`,
+        );
+        console.log(
+          `[mox] trafficMode=selective allowlist=${out.session.proxy.mockAllowlist.length}`,
+        );
+        if (out.savedRule) {
+          console.log(`[mox] rules pack saved: ${out.savedRule.name}`);
+        }
+      } catch (e) {
+        console.error(`[mox] ${e.message}`);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error('Usage: mox map import <file>');
+    process.exit(1);
+  }
   if (cmd === 'service') {
     const { runService } = require('../scripts/service-cli');
     runService({ _: [cmd, ...rest], flags: f });
@@ -506,9 +537,24 @@ async function main() {
     trustCa({ open: Boolean(f.open) });
     return;
   }
-  if (cmd === 'record') {
-    runTraffic(f, 'all-passthrough');
-    return;
+  if (cmd === 'device') {
+    const sub = rest[0];
+    if (sub === 'prepare') {
+      const { devicePrepare } = require('../scripts/device-prepare');
+      try {
+        devicePrepare({
+          lanIp: f['lan-ip'] || f.lanIp || rest[1],
+          proxyPort: Number(f['proxy-port'] || f.proxyPort || 18999),
+          catalogHost: f['catalog-host'] || undefined,
+        });
+      } catch (e) {
+        console.error(`[mox] ${e.message}`);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error('Usage: mox device prepare --lan-ip=<ip> [--proxy-port=18999]');
+    process.exit(1);
   }
   if (cmd === 'mock') {
     runTraffic(f, 'all-mock');
@@ -615,6 +661,26 @@ async function main() {
       );
       console.log(`    upgrade: ${r.upgradeHint}`);
     }
+    return;
+  }
+
+  if (cmd === 'quality-gate') {
+    const { runQualityGate } = require('../scripts/quality-gate');
+    const report = await runQualityGate({
+      requireMitmCheck: f['require-mitm-check'] || null,
+      scenario: f.scenario || null,
+      name: Array.isArray(f.name) ? f.name.join(',') : f.name || null,
+    });
+    if (report.ok) {
+      console.log(`[mox] quality-gate OK report=${report.reportPath}`);
+      process.exitCode = 0;
+      return;
+    }
+    console.error(`[mox] quality-gate FAILED report=${report.reportPath}`);
+    for (const fail of report.failures) {
+      console.error(`  - ${fail.code}: ${fail.message}`);
+    }
+    process.exitCode = 1;
     return;
   }
 

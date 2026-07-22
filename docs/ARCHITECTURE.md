@@ -6,7 +6,7 @@
 
 | 角色 | 职责 |
 |------|------|
-| CLI / runtime | discover、generate、session、proxy、scenario、capture-merge、smoke |
+| CLI / runtime | discover、generate、session、proxy、scenario、capture-merge、smoke、quality-gate、map import、device prepare |
 | LLM（或人） | 有任务时的 classify、冲突决议、`new` IO 起草（须确认）、缺口解释与下一步 |
 | Skill（[`SKILL.md`](../SKILL.md)） | checklist + BLOCK/禁宣称规则；禁止 Agent 自写脚本绕开 CLI |
 
@@ -58,7 +58,8 @@ LLM 介入边界（摘要；**真源**见 [`DECISIONS.md`](./DECISIONS.md) § LL
 
 优先级：`passthroughHosts` → `trafficMode` → 无 rule 时 `missPolicy`。
 
-日常入口：`mox start`（默认 `all-mock`，主轨 0 依赖）；可选辅轨 `start --record`（=`all-passthrough`，升 L2，非 E2E）。
+日常入口：`mox start`（默认 `all-mock` + `proxy.mode=mock-lab`，主轨 0 依赖）；可选辅轨 `start --capture-open`（加宽 MITM 落盘）或 `traffic all-passthrough`（全透传升 L2，非 E2E）。  
+`--rules` / `map import` → `selective`；Whistle `.txt` 与 `.json` stub 包并列。提测：`mox quality-gate`。
 
 细节与 port 匹配见 [`references/session-and-proxy.md`](../references/session-and-proxy.md)。
 

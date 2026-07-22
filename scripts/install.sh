@@ -33,12 +33,18 @@ echo "  cd <your-frontend-project> && mox init --name=<slug>"
 echo "  mox start --name=<slug>"
 echo "  mox scenario e2e-happy   # or e2e-fault / e2e-slow"
 echo "  mox smoke --ci"
+echo "  mox quality-gate         # exit 0 = 可提测（零溢出口径）"
 echo "  mox stop --name=<slug>"
 echo ""
+echo "Selective mock (Whistle-like rules/*.json or *.txt):"
+echo "  mox start --rules=<pack>              # or --rules=a,b (missing names skipped)"
+echo "  mox map import ./whistle-map.txt      # one-shot import"
+echo ""
 echo "Optional fidelity upgrade (needs real upstream; not for E2E):"
-echo "  mox start --name=<slug> --record"
+echo "  mox start --name=<slug> --capture-open"
 echo "  mox stop --auto-merge --name=<slug>"
 echo ""
+
 if command -v mox >/dev/null; then
   mox --help | head -n 30
 else

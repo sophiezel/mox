@@ -158,6 +158,14 @@ function applySessionOpts(base, opts = {}) {
   if (opts.recordMockHits === true) {
     patch.proxy = { ...(patch.proxy || {}), recordMockHits: true };
   }
+  if (opts.captureOpen === true) {
+    const { normalizeProxyMode } = require('../lib/capture-filter');
+    patch.proxy = {
+      ...(patch.proxy || {}),
+      mode: normalizeProxyMode('capture-open'),
+      recordMisses: true,
+    };
+  }
   if (opts.scanDir) {
     patch.scanDir = path.resolve(String(opts.scanDir));
   }
@@ -204,7 +212,7 @@ async function startSession(opts = {}) {
   if (ruleKeywords.length && opts.traffic && opts.traffic !== 'selective') {
     if (opts.traffic === 'all-passthrough') {
       console.log(
-        '[mox] ignoring all-passthrough/--record traffic mode; --rules keeps selective',
+        '[mox] ignoring all-passthrough traffic mode; --rules keeps selective',
       );
     } else {
       throw new Error(
@@ -235,14 +243,16 @@ async function startSession(opts = {}) {
 
   if (ruleKeywords.length) {
     applyRulesToSession(ruleKeywords, { rulesDir: opts.rulesDir });
-    if (opts.record) {
-      saveSession({
-        proxy: {
-          ...(loadSession().proxy || {}),
-          recordMisses: true,
-        },
-      });
-    }
+  }
+  if (opts.captureOpen) {
+    const { normalizeProxyMode } = require('../lib/capture-filter');
+    saveSession({
+      proxy: {
+        ...(loadSession().proxy || {}),
+        mode: normalizeProxyMode('capture-open'),
+        recordMisses: true,
+      },
+    });
   }
 
   let cfg = applySessionOpts(loadSession(catalogs[0]), opts);
@@ -307,9 +317,13 @@ async function startSession(opts = {}) {
     port: mockPort,
     cors: cfg.cors,
     caseHeader: cfg.proxy.injectCaseHeader || 'x-mock-case',
+    mode: cfg.proxy.mode || 'mock-lab',
+    serveCaptureIfEmpty: Boolean(cfg.proxy.serveCaptureIfEmpty),
+    capturesDir: capturesDirFor(primary),
   });
+  process.env.MOX_PROXY_MODE = cfg.proxy.mode || 'mock-lab';
   console.log(
-    `[mox] mock ${mock.url} catalogs=${catalogs.join(',')}`,
+    `[mox] mock ${mock.url} catalogs=${catalogs.join(',')} mode=${cfg.proxy.mode || 'mock-lab'}`,
   );
 
   let proxy = null;
@@ -397,6 +411,8 @@ async function startSession(opts = {}) {
       recordMisses: cfg.proxy.recordMisses !== false,
       recordMockHits: Boolean(cfg.proxy.recordMockHits || opts.recordMockHits),
       captureScope: cfg.proxy.captureScope || 'catalog',
+      mode: cfg.proxy.mode || 'mock-lab',
+      captureMitmHosts: cfg.proxy.captureMitmHosts || [],
       captureNoiseSuffixes: cfg.proxy.captureNoiseSuffixes || [],
       allowOpenProxy,
       rejectUnauthorized: cfg.proxy.rejectUnauthorized !== false,

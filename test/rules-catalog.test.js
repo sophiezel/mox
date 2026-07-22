@@ -79,6 +79,14 @@ test('parseArgs accumulates --name and --rules', () => {
   ]);
   assert.deepEqual(p.flags.name, ['tower', 'other']);
   assert.deepEqual(p.flags.rules, ['jian-h5', 'xrk']);
+
+  const comma = parseArgs([
+    'node',
+    'mox',
+    'start',
+    '--rules=csp-trade,csp-tasks',
+  ]);
+  assert.deepEqual(comma.flags.rules, ['csp-trade', 'csp-tasks']);
 });
 
 test('global session save/load ignores project path', () => {
@@ -171,6 +179,115 @@ test('rules keyword resolve + multi merge + apply selective', () => {
     assert.ok(fs.existsSync(path.join(TMP, 'roundtrip.json')));
   });
   fs.rmSync(TMP, { recursive: true, force: true });
+});
+
+test('multi --rules merges hits and skips missing names', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-rules-multi-'));
+  const prevData = process.env.MOX_DATA_ROOT;
+  const prevSession = process.env.MOX_SESSION_FILE;
+  process.env.MOX_DATA_ROOT = root;
+  process.env.MOX_SESSION_FILE = path.join(root, 'session.json');
+  try {
+    ensureDataDirs();
+    const rulesDir = path.join(root, 'rules');
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(rulesDir, 'csp-trade.txt'),
+      'https://api.example.com/v1/users http://127.0.0.1/v1/users\n',
+    );
+    fs.writeFileSync(
+      path.join(rulesDir, 'csp-tasks.json'),
+      JSON.stringify({ stubs: ['GET up/tasks'] }),
+    );
+
+    const { loadAndMergeRules, applyRulesToSession } = require('../lib/rules');
+    const merged = loadAndMergeRules(
+      ['csp-trade', 'missing-pack', 'csp-tasks'],
+      rulesDir,
+    );
+    assert.deepEqual(merged.resolved, ['csp-trade', 'csp-tasks']);
+    assert.deepEqual(merged.skipped, ['missing-pack']);
+    assert.ok(merged.stubs.some((id) => /users/.test(id)));
+    assert.ok(merged.stubs.includes('GET up/tasks'));
+
+    const { session, applied } = applyRulesToSession(
+      ['csp-trade', 'nope', 'csp-tasks'],
+      { rulesDir },
+    );
+    assert.equal(applied, true);
+    assert.equal(session.proxy.trafficMode, 'selective');
+    assert.deepEqual(session.activeRules, ['csp-trade', 'csp-tasks']);
+    assert.ok(session.proxy.mockAllowlist.includes('GET up/tasks'));
+
+    const none = applyRulesToSession(['ghost-a', 'ghost-b'], { rulesDir });
+    assert.equal(none.applied, false);
+    assert.deepEqual(none.merged.skipped, ['ghost-a', 'ghost-b']);
+    assert.deepEqual(loadSession().activeRules, ['csp-trade', 'csp-tasks']);
+  } finally {
+    if (prevData === undefined) delete process.env.MOX_DATA_ROOT;
+    else process.env.MOX_DATA_ROOT = prevData;
+    if (prevSession === undefined) delete process.env.MOX_SESSION_FILE;
+    else process.env.MOX_SESSION_FILE = prevSession;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Whistle .txt map via --rules sets selective + allowlist + captureMitmHosts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-rules-txt-'));
+  const prevData = process.env.MOX_DATA_ROOT;
+  const prevSession = process.env.MOX_SESSION_FILE;
+  process.env.MOX_DATA_ROOT = root;
+  process.env.MOX_SESSION_FILE = path.join(root, 'session.json');
+  try {
+    ensureDataDirs();
+    const rulesDir = path.join(root, 'rules');
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(rulesDir, 'csp-trade.txt'),
+      [
+        '# comment',
+        'https://api.example.com/v1/users http://127.0.0.1/v1/users',
+        'https://pay.example.com/checkout http://127.0.0.1/checkout',
+        '',
+      ].join('\n'),
+    );
+
+    const {
+      listRuleNames,
+      resolveRuleEntry,
+      applyRulesToSession,
+    } = require('../lib/rules');
+    assert.ok(listRuleNames(rulesDir).includes('csp-trade'));
+    assert.equal(resolveRuleEntry('csp-trade', rulesDir).kind, 'map');
+
+    const { merged, session } = applyRulesToSession(['csp-trade'], {
+      rulesDir,
+    });
+    assert.deepEqual(merged.resolved, ['csp-trade']);
+    assert.ok(merged.stubs.some((id) => /users/.test(id)));
+    assert.ok(merged.stubs.some((id) => /checkout/.test(id)));
+    assert.equal(session.proxy.trafficMode, 'selective');
+    assert.ok(session.proxy.mockAllowlist.length >= 2);
+    assert.ok(
+      (session.proxy.captureMitmHosts || []).includes('api.example.com'),
+    );
+    assert.ok(
+      (session.proxy.captureMitmHosts || []).includes('pay.example.com'),
+    );
+    assert.deepEqual(session.activeRules, ['csp-trade']);
+
+    const { serviceDataDir } = require('../lib/paths');
+    const { normalizeHostLabel } = require('../lib/upstream');
+    const up = normalizeHostLabel('api.example.com') || 'api-example-com';
+    const proxyRules = path.join(serviceDataDir(up), 'proxy-rules.json');
+    assert.ok(fs.existsSync(proxyRules), `expected ${proxyRules}`);
+  } finally {
+    if (prevData === undefined) delete process.env.MOX_DATA_ROOT;
+    else process.env.MOX_DATA_ROOT = prevData;
+    if (prevSession === undefined) delete process.env.MOX_SESSION_FILE;
+    else process.env.MOX_SESSION_FILE = prevSession;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('resolveActiveCatalogs requires existing proxy-rules', () => {

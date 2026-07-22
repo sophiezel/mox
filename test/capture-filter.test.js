@@ -122,9 +122,47 @@ test('shouldWriteCapture: recordMisses false drops miss', () => {
   );
 });
 
-test('extra captureNoiseSuffixes merge', () => {
+test('shouldWriteCapture: capture-open allows non-catalog host when mitmPlaintext=true', () => {
   assert.equal(
-    isCaptureNoiseHost('foo.corp-internal.test', ['corp-internal.test']),
+    shouldWriteCapture({
+      host: 'cdn.example.com',
+      reason: 'miss',
+      rules: jianRules,
+      captureScope: 'catalog',
+      recordMisses: true,
+      mode: 'capture-open',
+      mitmPlaintext: true,
+    }),
     true,
+  );
+});
+
+test('shouldWriteCapture: mock-lab still denies non-catalog under captureScope=catalog', () => {
+  assert.equal(
+    shouldWriteCapture({
+      host: 'cdn.example.com',
+      reason: 'miss',
+      rules: jianRules,
+      captureScope: 'catalog',
+      recordMisses: true,
+      mode: 'mock-lab',
+      mitmPlaintext: true,
+    }),
+    false,
+  );
+});
+
+test('shouldWriteCapture: capture-open still drops noise even with mitmPlaintext', () => {
+  assert.equal(
+    shouldWriteCapture({
+      host: 'clients2.google.com',
+      reason: 'miss',
+      rules: jianRules,
+      captureScope: 'catalog',
+      recordMisses: true,
+      mode: 'capture-open',
+      mitmPlaintext: true,
+    }),
+    false,
   );
 });

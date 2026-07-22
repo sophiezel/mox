@@ -35,6 +35,8 @@ mox --help
 mox help --all    # 含较少用的命令
 ```
 
+一键脚本**不需要**为本次能力单独改流程：`bootstrap.sh` / `install.sh` 仍是 clone → `npm install` → `npm link` → skill 软链；装完即可用下方命令。
+
 ## 快速开始
 
 ```bash
@@ -62,18 +64,43 @@ mox start --name=tower --name=other
 
 系统学习（前端 mock → 服务 Catalog → Store → 后端推导）按 L0→L6 跟做：[`references/learning-path.md`](./references/learning-path.md)。
 
-## 常用操作
+## Hybrid 提测口径（推荐）
 
-**按 rule 文件只 mock 一部分**（共享 `rules/`，不绑 project）：
+| 模式 | 含义 |
+|------|------|
+| `proxy.mode=mock-lab`（默认） | 日常自测 / E2E；空成功信封或 `TRACE_EMPTY` → **HTTP 503**（禁止假成功） |
+| `proxy.mode=capture-open` | `mox start --capture-open`：加宽 MITM 明文落盘；**不等于**全透传 |
+
+- **零溢出可提测** = `mox quality-gate` **exit 0**（不是字面 0 bug）。
+- 逃生空 mock：`MOX_ALLOW_EMPTY_MOCK=1`，或改用 `--capture-open`。
+- 纯全透传：`mox traffic all-passthrough`（已移除旧的 `mox record` / `--record`）。
 
 ```bash
-# rules/jian-h5.json、rules/xrk.json — stubs 并集走 mock，其余透传
-mox start --name=tower --name=other --rules jian-h5 xrk
-# 同时 --record：仍以 rules 为准（selective）；其余透传会写入 captures/
-mox start --name=tower --rules jian-h5 --record
+mox start --name=demo --no-auto-launch
+mox scenario e2e-happy
+mox quality-gate
+# Hybrid 可见性（H1）：App 须走系统 Wi‑Fi 代理
+# mox quality-gate --require-mitm-check=https://<catalog-host>/__mox_mitm_check
+```
+
+Playwright 样板：[`examples/playwright-mox/`](./examples/playwright-mox/)。
+
+## 常用操作
+
+**按 rule 只 mock 一部分**（共享 `rules/`，不绑 project；对齐 Whistle）：
+
+```bash
+# rules/*.json stub 包，或同名 *.txt Whistle 两列 map（同名优先 .json）
+mox start --name=tower --rules=csp-trade
+mox start --rules=csp-trade,csp-tasks   # 逗号/空格多值 merge；找不到的名字跳过
+mox start --name=tower --rules jian-h5 xrk
+# 同时 --capture-open：仍以 rules 为准（selective）；未命中可落盘
+mox start --name=tower --rules jian-h5 --capture-open
 mox rules use jian-h5 xrk    # 运行中热切换
 mox rules list
-mox rules save my-pack       # 从当前 session 导出
+mox rules save my-pack       # 从当前 session 导出 .json
+# 任意路径的 map 文件也可一次性导入：
+mox map import ./whistle-map.txt
 ```
 
 **切场景**（成功 / 故障 / 慢）：
@@ -84,7 +111,7 @@ mox scenario e2e-fault    # 或 e2e-happy / e2e-slow
 mox set-case "GET svc-a/v1/items" biz_error
 ```
 
-详见 [`references/scenarios.md`](./references/scenarios.md)。
+Scenario 可声明 `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quality-gate` 失败。详见 [`references/scenarios.md`](./references/scenarios.md)。
 
 **CI 冒烟**：
 
@@ -92,18 +119,19 @@ mox set-case "GET svc-a/v1/items" biz_error
 mox start --name=demo --no-auto-launch
 mox scenario e2e-happy
 mox smoke --ci
+mox quality-gate
 mox stop --name=demo
 ```
 
 **录真实响应写回 mock**（要能打到上游）：
 
 ```bash
-mox start --name=demo --record
+mox start --name=demo --capture-open
 # 浏览器走一遍主流程…
 mox stop --name=demo --auto-merge
 ```
 
-同一 session 里热切换：`mox record` → 操作 → `mox merge` → `mox mock`。
+同一 session 里热切换：`mox traffic all-passthrough` → 操作 → `mox merge` → `mox mock`。
 
 **真机代理**（默认已对局域网开放，同 Whistle）：
 
@@ -111,6 +139,8 @@ mox stop --name=demo --auto-merge
 mox start --name=demo
 # 按日志抄 Wi‑Fi 代理 IP:port；手机装日志里的 http://<真实LAN>:<port>/mox/ca.cer
 # 仅本机：--proxy-host=127.0.0.1   收紧 CONNECT：--no-open-proxy
+# Android（可选 ADB 助手，不输 PIN）：
+mox device prepare --lan-ip=<LAN>
 ```
 
 见 [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md)。
@@ -142,22 +172,27 @@ mox export-msw --out=./msw-handlers.js --name=demo
 |------|--------|
 | `init` | 扫描项目，生成 catalog（静默 domain-draft + CRUD Store 绑定） |
 | `start` / `stop` | 起停全局 mock+proxy；start 默认 reset Store；stop 打印 journal 摘要 |
-| `rules list\|use\|save` | 共享 rule 文件：列出 / 应用 / 导出 |
+| `rules list\|use\|save` | 共享 rule：`.json` stub / `.txt` Whistle map；多值 merge |
+| `map import <file>` | Whistle 两列 Map → selective + allowlist + 增量 proxy-rules |
 | `scenario` / `set-case` | 切场景或单个接口响应 |
+| `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
+| `device prepare` | ADB：设 `http_proxy`、push CA、打印 WebView mitm-check |
 | `smoke [--ci]` | 冒烟 |
-| `start --record` / `record` / `mock` / `merge` | 录真实响应、写回、切回 mock |
+| `start --capture-open` / `traffic all-passthrough` / `mock` / `merge` | 加宽落盘、全透传、切回 mock、写回 |
 | `help --all` | 高级：`service` / `domain-draft` / `materialize-service` / `traffic` / … |
 
 旧名仍可用：`session start|stop`、`set-scenario`、`capture-merge` 等。
 
-`init` / `generate` 常用 flag：`--force` 清孤儿文件（默认不擦已录数据）；`--overwrite-capture` 才允许用法推断盖掉已录真值；`--strict-usage` 在追踪结果为空时失败。
-`start` 高级 flag：`--keep-state` 保留 Virtual Service 内存状态。
+`init` / `generate` 常用 flag：`--force` 清孤儿文件（默认不擦已录数据）；`--overwrite-capture` 才允许用法推断盖掉已录真值；`--strict-usage` 在追踪结果为空时失败。  
+`start` 常用 flag：`--rules=a,b`、`--capture-open`、`--keep-state`、`--mitm=0`、`--proxy-host=127.0.0.1`、`--no-open-proxy`。
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
 | [`references/learning-path.md`](./references/learning-path.md) | L0→L6 分层引导（推荐系统学习） |
+| [`references/session-and-proxy.md`](./references/session-and-proxy.md) | traffic / `--rules` / Whistle map / `proxy.mode` |
+| [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md) | Playwright、真机、quality-gate、device prepare |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | 已锁定决策（真源） |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | 架构摘要 |
 | [`docs/BACKLOG.md`](./docs/BACKLOG.md) | 未做事项 |
@@ -165,6 +200,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | [`references/`](./references/) | 操作工具书 |
 | [`SKILL.md`](./SKILL.md) | Agent 编排（可选） |
 | [`docs/README.md`](./docs/README.md) | docs 索引 |
+| [`CHANGELOG.md`](./CHANGELOG.md) | 变更明细 |
 
 ## 测试
 

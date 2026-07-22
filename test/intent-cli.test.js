@@ -9,13 +9,12 @@ const { resolveStartTraffic } = require('../bin/mox');
 const { setTraffic } = require('../scripts/set-traffic');
 const { loadSession, saveSession } = require('../lib/session-config');
 const { applySessionOpts } = require('../scripts/start-session');
-const { normalizeTrafficMode } = require('../lib/traffic-mode');
 const {
   stopSession,
   countCaptureFiles,
   hintMergeIfCaptures,
 } = require('../scripts/stop-session');
-const { ensureDataDirs, serviceDataDir } = require('../lib/paths');
+const { ensureDataDirs } = require('../lib/paths');
 const { capturesDirFor } = require('../lib/catalog-merge');
 const { setScenario } = require('../scripts/set-scenario');
 const { copyBuiltinScenarios } = require('../lib/scenario');
@@ -44,41 +43,41 @@ function withSlug(fn) {
   }
 }
 
-test('intent: --record maps to all-passthrough', () => {
+test('intent: --capture-open maps to capture-open (not all-passthrough)', () => {
   const logs = [];
   const orig = console.log;
   console.log = (...a) => logs.push(a.join(' '));
   try {
-    assert.equal(resolveStartTraffic({ record: true }), 'all-passthrough');
-    assert.ok(logs.some((l) => l.includes('mode=record') && l.includes('not for E2E')));
+    assert.equal(resolveStartTraffic({ 'capture-open': true }), null);
+    assert.ok(logs.some((l) => l.includes('mode=capture-open')));
   } finally {
     console.log = orig;
   }
 });
 
-test('intent: --record and --traffic= are mutually exclusive', () => {
+test('intent: --capture-open and --traffic= are mutually exclusive', () => {
   assert.throws(
-    () => resolveStartTraffic({ record: true, traffic: 'all-mock' }),
+    () => resolveStartTraffic({ 'capture-open': true, traffic: 'all-mock' }),
     /mutually exclusive/,
   );
 });
 
-test('intent: --record with --rules does not force all-passthrough', () => {
+test('intent: --capture-open with --rules does not force all-passthrough', () => {
   const logs = [];
   const orig = console.log;
   console.log = (...a) => logs.push(a.join(' '));
   try {
     assert.equal(
-      resolveStartTraffic({ record: true, rules: ['jian-h5'] }),
+      resolveStartTraffic({ 'capture-open': true, rules: ['jian-h5'] }),
       null,
     );
-    assert.ok(logs.some((l) => l.includes('selective mock + record passthrough')));
+    assert.ok(logs.some((l) => l.includes('selective mock + capture-open')));
   } finally {
     console.log = orig;
   }
 });
 
-test('intent: rules + record keeps selective and enables recordMisses', () => {
+test('intent: rules + capture-open keeps selective and enables recordMisses', () => {
   withSlug((slug) => {
     const rulesDir = path.join(os.tmpdir(), `intent-rules-${slug}`);
     fs.mkdirSync(rulesDir, { recursive: true });
@@ -110,23 +109,18 @@ test('intent: plain start leaves traffic unset (caller keeps default all-mock)',
   assert.equal(resolveStartTraffic({ traffic: 'selective' }), 'selective');
 });
 
-test('intent: start --record persistence path writes all-passthrough', () => {
+test('intent: start --capture-open persistence path writes proxy.mode=capture-open', () => {
   withSlug((slug) => {
-    const traffic = resolveStartTraffic({ record: true });
-    saveSession(slug, {
-      proxy: {
-        ...(loadSession(slug).proxy || {}),
-        trafficMode: normalizeTrafficMode(traffic),
-      },
-    });
-    const cfg = loadSession(slug);
-    assert.equal(cfg.proxy.trafficMode, 'all-passthrough');
-    const applied = applySessionOpts(loadSession(slug), { traffic: 'all-passthrough' });
-    assert.equal(applied.proxy.trafficMode, 'all-passthrough');
+    const traffic = resolveStartTraffic({ 'capture-open': true });
+    assert.equal(traffic, null);
+    const applied = applySessionOpts(loadSession(slug), { captureOpen: true });
+    assert.equal(applied.proxy.mode, 'capture-open');
+    assert.notEqual(applied.proxy.recordMisses, false);
+    assert.notEqual(applied.proxy.trafficMode, 'all-passthrough');
   });
 });
 
-test('intent: record / mock hot-switch match traffic actions', () => {
+test('intent: passthrough / mock hot-switch match traffic actions', () => {
   withSlug((slug) => {
     setTraffic({ name: slug, action: 'all-passthrough' });
     assert.equal(loadSession(slug).proxy.trafficMode, 'all-passthrough');

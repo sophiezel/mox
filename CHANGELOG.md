@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Added
+- `mox device prepare`：ADB 设 `http_proxy`、push CA、打印 App WebView `__mox_mitm_check`（不输 PIN；H1）。
+- `quality-gate --require-mitm-check=<url>`：Hybrid 可见性探针。
+- Scenario `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quality-gate` 失败。
+- `mox quality-gate`：提测门禁（空/TRACE_EMPTY → exit 1；写 `.data/reports/quality-gate-*.json`）。零溢出口径 = gate exit 0。
+- `proxy.captureMitmHosts`：`capture-open` 下对名单 host 做 MITM（无需 path rule）；`map import` 自动并入。
+- `serveCaptureIfEmpty`（默认关）：空 stub 可只读回放合格 capture，不写合同 / 不 `captureMerge`。
+- `mox map import <file>`：Whistle 两列 Map → `trafficMode=selective` + allowlist + 增量 `proxy-rules`；`127.0.0.1` 表示走本地 mock。
+- `--rules` 同样接受 `rules/<name>.txt` Whistle map（与 `.json` stub 包并列；同名优先 `.json`），启动即可，不必先 `map import`。
+- `--rules=a,b`（或空格多值）merge 多个 rule；找不到的 keyword 跳过，不中断启动。
+- Upstream failure journal：MITM 透传连接失败与 HTTP≥400 追加 `.data/reports/upstream-failures.jsonl`（不 merge 合同）。
+- Playwright 样板：`examples/playwright-mox/`。
+
+### Breaking
+- **命名统一**：`proxy.mode=capture-open`（原 `record-first`）；CLI `mox start --capture-open`（原 `--record`）；`proxy.captureMitmHosts`（原 `recordMitmHosts`）。已移除 `mox record` 短命令，纯全透传只用 `mox traffic all-passthrough`。
+- **mock-lab 空 mock 门禁**：`proxy.mode=mock-lab` 下成功信封 `data:{}`/`null` 或 `gap:TRACE_EMPTY` 返回 **HTTP 503**（附 `gap`），禁止假成功。逃生：`MOX_ALLOW_EMPTY_MOCK=1` 或 `proxy.mode=capture-open`。
+- **`--capture-open` ≠ 全透传**：只打开/加宽 MITM 落盘（默认仍 mock 门闸）。纯全透传请用 `mox traffic all-passthrough` 或 `--traffic=all-passthrough`。
+
+### Changed
+- Session 增加 `proxy.mode`：`mock-lab`（默认）| `capture-open`；`capture-open` + MITM 明文时 `shouldWriteCapture` 可越过 `captureScope=catalog`（噪声 denylist 仍生效）。
+
 ### Changed
 - **MITM 根证书迁至 `~/.mox/certs/root.{key,crt}`**（Whistle 同款用户级持久化）；有效则不重签；可从项目 `.data/mitm` **复制迁移**（不换指纹）。测例仅用 `MOX_MITM_DIR`。
 - CA 下载对齐 Whistle：`/mox/ca.cer` → `application/pkix-cert` + `mox-rootCA.cer`；`/mox/ca.crt` → `application/x-x509-ca-cert`。

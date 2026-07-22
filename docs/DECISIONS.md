@@ -1,6 +1,6 @@
 # mox 定稿决策
 
-最后同步：2026-07-19。与 archive 中历史计划不一致时，以本文 + 代码为准。
+最后同步：2026-07-22。与 archive 中历史计划不一致时，以本文 + 代码为准。
 
 ## 产品定位
 
@@ -8,7 +8,7 @@
 |----|------|
 | 定位 | **通用 Mock CLI + 可选 Agent Skill 编排层**：前端 Mock 后端 HTTP(S) 接口，后端未通时不阻塞自测与 E2E |
 | 主目标 | **前端与后端 0 依赖**：默认全 mock 挡住阻断性请求；E2E/CI 全程 mock + scenario，不依赖真上游 |
-| 双轨 | **主轨** `init` / `start` / `scenario` / `smoke`（`all-mock`）；**辅轨** `start --record` / `record` / `merge`（可选升 L2，显式依赖上游） |
+| 双轨 | **主轨** `init` / `start` / `scenario` / `smoke`（`all-mock`）；**辅轨** `start --capture-open` / `traffic all-passthrough` / `mock` / `merge`（可选升 L2，显式依赖上游） |
 | 否决 | **否决**「L0/L1 默认透传真上游」——破坏解耦；录制不得成为日常/E2E 默认路径 |
 | 角色一句话 | **CLI 负责确定性能力；LLM 负责有歧义的语义决策与流程编排；Skill 把边界钉死。** |
 | 仓库 | 本仓（git）；`scripts/install.sh` 一键 `npm link` + 可选 skill symlink |
@@ -26,7 +26,11 @@
 | **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
 | **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
 | 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
-| Rules | 包根 `rules/*.json`（或 `--rules-dir` / `MOX_RULES_DIR`）；stub 级「标签」用 `--rules`，不是 projects/ |
+| Rules | 包根 `rules/*.json` stub 包或 `*.txt` Whistle map（或 `--rules-dir` / `MOX_RULES_DIR`）；`--rules=a,b` / 空格多值 **merge**，找不到的名字**跳过**；同名优先 `.json` |
+| Map | `mox map import <file>` 与 `--rules` 加载 `.txt` 等价语义：`selective` + allowlist + 增量 `proxy-rules` + `captureMitmHosts`；`127.0.0.1` 仅表示走本地 mock |
+| `proxy.mode` | `mock-lab`（默认）\| `capture-open`；CLI `--capture-open`（已弃用 `--record` / `record-first` / `mox record`） |
+| 提测 | `mox quality-gate` exit 0 = 可提测（Z1）；可选 `--require-mitm-check=`（H1：须系统代理 WebView） |
+| 真机助手 | `mox device prepare --lan-ip=`：ADB 设代理、push CA、提示 `__mox_mitm_check`（不输 PIN） |
 | 多 catalog | `start --name=<serviceId…>` 挂载指定 services；省略 `--name` = 全部有 proxy-rules 的 **services** |
 | service id 冲突 | 同 id 且 `hosts` 不相交 → generate **硬失败**（同 path 不同域名不得静默合并）；无 host、仅相同 prefixKey 时无法自动拆分（见 GLOSSARY 残留限制） |
 | 否决 | 默认「每 frontend 一份运行时 session / 各起一个代理」；否决「mocks 真源挂在 frontend 名下」 |
@@ -127,11 +131,15 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 
 ## CLI 面
 
-**主轨意图别名（默认 help）**：`init` · `start` · `stop` · `rules` · `scenario` · `smoke`  
-**辅轨**：`start --record` · `record` · `mock` · `merge`（`stop --auto-merge`）  
+**主轨意图别名（默认 help）**：`init` · `start` · `stop` · `rules` · `scenario` · `smoke` · `quality-gate`  
+**辅轨**：`start --capture-open` · `traffic all-passthrough` · `mock` · `merge`（`stop --auto-merge`） · `map import` · `device prepare`  
 **Advanced / 旧名（`help --all`）**：`service` · `domain-draft` · `materialize-service` · `classify` · `generate` · `session start\|stop` · `set-case` · `set-scenario` · `traffic …` · `capture-merge` · `list-empty` · `import-openapi` · `export-msw` · `audit` · install/uninstall  
 
-`--record` 与 `--traffic=` 互斥；默认 `help` 分层，不把辅轨/Advanced 冲淡主轨。  
+`--capture-open` → `proxy.mode=capture-open`（加宽 MITM 落盘，**不等于** `all-passthrough`）；与 `--traffic=` 互斥；纯全透传用 `mox traffic all-passthrough`。  
+`capture-open` 下 `proxy.captureMitmHosts`（map/`--rules` `.txt` 自动并入）可对名单 host MITM（无需 path rule）。  
+**空 mock 门禁（mock-lab）**：成功信封空 `data`/`TRACE_EMPTY` → HTTP **503**；`MOX_ALLOW_EMPTY_MOCK=1` 或 `capture-open` 可放行。  
+「零溢出」提测口径 = `mox quality-gate` exit 0（非字面 0 bug）。  
+默认 `help` 分层，不把辅轨/Advanced 冲淡主轨。  
 出错时打印 `see: references/guide-lN-….md#锚点`；系统学习见 [`references/learning-path.md`](../references/learning-path.md)。  
 `start --keep-state`：保留 Virtual Service 内存与 journal（默认每次 start 清空）。
 

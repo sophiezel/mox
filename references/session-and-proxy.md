@@ -12,10 +12,24 @@
 - `--mock-port` / `--proxy-port`（**代理入口端口**，与规则里的上游目标 port 正交）
 - `--proxy-host`（默认 `0.0.0.0`；仅本机用 `127.0.0.1`）
 - `--name=a --name=b`（或 `--name=a,b`）挂载 catalog；省略 = 全部
-- `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）；可与 `--record` 同用（仍 selective，只录透传）
+- `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）：`rules/<name>.json` stub 包，或 Whistle 两列 `rules/<name>.txt` map；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
 - `--traffic=all-mock|all-passthrough|selective` 启动时流量模式（写入全局 session）
+- `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 明文落盘；map/allowlist 仍可强制 mock）。**不等于**全透传；纯全透传请用 `mox traffic all-passthrough` 或 `--traffic=all-passthrough`
 - `--scan-dir=DIR`（覆盖 session 中的 `scanDir`）：启用 **miss 时按页面源码即时 mock**
+
+## proxy.mode（mock-lab | capture-open）
+
+| `proxy.mode` | 行为 |
+|--------------|------|
+| `mock-lab`（默认） | `captureScope=catalog`：只录规则已覆盖 host（噪声 denylist 仍生效） |
+| `capture-open` | 已 MITM 解密的明文可落盘（噪声 denylist 仍生效）；allowlist/rules 命中仍 mock |
+
+```bash
+mox start --capture-open                   # capture-open；默认仍 all-mock 门闸
+mox start --rules jian-h5 --capture-open   # selective mock + capture-open
+mox traffic all-passthrough          # 纯全透传（不再由 --capture-open 表达）
+```
 
 ## On-demand page mock（miss → 源码）
 
@@ -34,13 +48,13 @@
 
 ```bash
 mox start --name=tower --name=other --rules jian-h5 xrk
-mox start --rules jian-h5 --record   # rules 优先：命中 mock，其余透传并录制
+mox start --rules jian-h5 --capture-open   # selective mock + capture-open capture
 mox rules use jian-h5 xrk
 mox rules list
 mox rules save my-pack
 ```
 
-文件：`<pkg>/rules/<name>.json`（`--rules-dir=` / `MOX_RULES_DIR` 可改）：
+文件：`<pkg>/rules/<name>.json` stub 包，或同名 `.txt` Whistle map（`--rules-dir=` / `MOX_RULES_DIR` 可改；同名时优先 `.json`）：
 
 ```json
 {
@@ -68,8 +82,11 @@ Catalog / `proxy-rules.json` 可全量存在；**运行时是否 mock 由 `traff
 3. 无 rule → `missPolicy`（passthrough | reject）
 
 ```bash
-mox traffic all-passthrough          # 录制
+mox traffic all-passthrough          # 纯全透传录制（非 --capture-open）
 mox traffic selective
+mox start --rules=csp-trade           # rules/csp-trade.txt Whistle map → selective
+mox start --rules=csp-trade,csp-tasks # multi merge；不存在的名字忽略
+mox map import ./whistle-map.txt     # 等价一次性导入（可 --save-as 落成 .json）
 mox traffic allow "GET svc-a/v1/items"
 mox traffic list
 mox traffic all-mock                 # 自测

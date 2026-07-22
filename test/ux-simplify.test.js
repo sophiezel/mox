@@ -63,7 +63,7 @@ test('hintForError maps common failures to guide anchors', () => {
   assert.match(hintForError('mock port in use: 127.0.0.1:3900'), /guide-l0/);
   assert.match(hintForError('no classify result — run mox init'), /guide-l1/);
   assert.match(
-    hintForError('--record and --traffic= are mutually exclusive'),
+    hintForError('--capture-open and --traffic= are mutually exclusive'),
     /guide-l2/,
   );
   assert.match(hintForError('unknown command'), /guide-l6/);

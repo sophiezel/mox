@@ -11,8 +11,19 @@ function startMockServer({
   cors = {},
   caseHeader = 'x-mock-case',
   resolveMocksRoot = null,
+  mode = 'mock-lab',
+  serveCaptureIfEmpty = false,
+  capturesDir = null,
 }) {
-  const app = createMockApp({ mocksRoot, cors, caseHeader, resolveMocksRoot });
+  const app = createMockApp({
+    mocksRoot,
+    cors,
+    caseHeader,
+    resolveMocksRoot,
+    mode,
+    serveCaptureIfEmpty,
+    capturesDir,
+  });
   const server = http.createServer(app);
 
   return new Promise((resolve, reject) => {

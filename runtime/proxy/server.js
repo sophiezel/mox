@@ -24,7 +24,9 @@ const { createStatefulEngine } = require('../../lib/stateful');
 const {
   shouldWriteCapture,
   normalizeCaptureScope,
+  normalizeProxyMode,
 } = require('../../lib/capture-filter');
+const { appendUpstreamFailure } = require('../../lib/upstream-failure-journal');
 
 const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024; // 10mb
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000;
@@ -109,6 +111,10 @@ function startProxyServer(opts) {
     recordMockHits = false,
     /** catalog = only hosts covered by rules; all = any miss (noise denylist still applies) */
     captureScope = 'catalog',
+    /** mock-lab | capture-open */
+    mode = 'mock-lab',
+    /** capture-open: hosts eligible for MITM without path rule */
+    captureMitmHosts = [],
     /** optional extra noise suffixes merged with defaults */
     captureNoiseSuffixes = [],
     capturesDir,
@@ -233,6 +239,7 @@ function startProxyServer(opts) {
   }
 
   const resolvedCaptureScope = normalizeCaptureScope(captureScope);
+  const resolvedProxyMode = normalizeProxyMode(mode);
 
   function recordCapture(rec) {
     let dir = capturesDir;
@@ -249,6 +256,8 @@ function startProxyServer(opts) {
         recordMisses,
         recordMockHits,
         captureNoiseSuffixes,
+        mode: rec.mode || resolvedProxyMode,
+        mitmPlaintext: Boolean(rec.mitmPlaintext),
       })
     ) {
       return;
@@ -810,9 +819,21 @@ function startProxyServer(opts) {
     const ua = String(req.headers['user-agent'] || '');
     const isCronet = /\bCronet\b/i.test(ua);
     const catalogHit = hostCoveredByRules(activeRules, hostname, portNum);
+    const captureHostHit =
+      normalizeProxyMode(mode) === 'capture-open' &&
+      Array.isArray(captureMitmHosts) &&
+      captureMitmHosts.some((h) => {
+        const pat = String(h || '')
+          .trim()
+          .toLowerCase();
+        if (!pat) return false;
+        const bare = pat.split(':')[0];
+        return hostname.toLowerCase() === bare || hostname.toLowerCase().endsWith(`.${bare}`);
+      });
     // Host coverage only — pathPrefix rules never match CONNECT probe path "/"
-    const ruleHit = mitmEnabled && !isCronet && catalogHit;
-    const forceCronetTunnel = Boolean(isCronet && mitmEnabled && catalogHit);
+    // capture-open + captureMitmHosts: MITM without path rule (map hosts)
+    const ruleHit = mitmEnabled && !isCronet && (catalogHit || captureHostHit);
+    const forceCronetTunnel = Boolean(isCronet && mitmEnabled && (catalogHit || captureHostHit));
 
     if (mitmEnabled && ruleHit) {
       try {
@@ -990,24 +1011,91 @@ function startProxyServer(opts) {
             timeout: upstreamTimeoutMs,
           },
           (upRes) => {
-            res.writeHead(upRes.statusCode || 200, upRes.headers);
-            upRes.pipe(res);
+            const chunks = [];
+            upRes.on('data', (c) => chunks.push(c));
+            upRes.on('end', () => {
+              const buf = Buffer.concat(chunks);
+              const bodyText = buf.toString('utf8');
+              let bodyJson;
+              try {
+                bodyJson = JSON.parse(bodyText);
+              } catch {
+                bodyJson = undefined;
+              }
+              if (!res.headersSent) {
+                res.writeHead(upRes.statusCode || 200, upRes.headers);
+                res.end(buf);
+              }
+              const status = upRes.statusCode || 200;
+              const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+              let requestBody;
+              if (isWrite && body.length) {
+                const reqText = body.toString('utf8');
+                try {
+                  requestBody = JSON.parse(reqText);
+                } catch {
+                  requestBody = reqText.slice(0, bodyLimit);
+                }
+              }
+              if (status >= 400) {
+                appendUpstreamFailure({
+                  kind: 'http-error',
+                  host: hostname,
+                  path: pathname,
+                  method,
+                  status,
+                  error: `HTTP ${status}`,
+                  taskId,
+                });
+              }
+              recordCapture({
+                host: hostname,
+                path: pathname,
+                method,
+                query: Object.fromEntries(
+                  new URL(`http://${hostname}${urlPath}`).searchParams,
+                ),
+                reason: rule ? 'traffic-passthrough' : 'miss',
+                stubId: rule?.stubId || rule?.id || null,
+                status,
+                responseBody: bodyJson !== undefined ? bodyJson : bodyText,
+                mitmPlaintext: true,
+                mode: resolvedProxyMode,
+                ...(requestBody !== undefined ? { requestBody } : {}),
+              });
+              logAccess({
+                action: rule ? 'mitm-traffic-passthrough' : 'mitm-passthrough',
+                method,
+                url: `https://${hostname}${urlPath}`,
+                status,
+              });
+            });
           },
         );
         upReq.on('error', (e) => {
           applyCorsHeaders(req, res, cors);
-          res.statusCode = 502;
-          res.end(JSON.stringify({ code: 502, message: e.message }));
+          if (!res.headersSent) {
+            res.statusCode = 502;
+            res.end(JSON.stringify({ code: 502, message: e.message }));
+          }
+          appendUpstreamFailure({
+            kind: 'connect-error',
+            host: hostname,
+            path: pathname,
+            method,
+            error: e.message,
+            message: e.message,
+            taskId,
+          });
+          logAccess({
+            action: 'mitm-passthrough-error',
+            method,
+            url: `https://${hostname}${urlPath}`,
+            error: e.message,
+          });
         });
         if (body.length) upReq.write(body);
         upReq.end();
-        if (rule) {
-          logAccess({
-            action: 'mitm-traffic-passthrough',
-            method,
-            url: `https://${hostname}${urlPath}`,
-          });
-        }
         return;
       }
 
@@ -1087,11 +1175,23 @@ function startProxyServer(opts) {
             } catch {
               bodyJson = undefined;
             }
+            const status = upRes.statusCode || 200;
+            if (status >= 400) {
+              appendUpstreamFailure({
+                kind: 'http-error',
+                host: target.hostname,
+                path: target.pathname,
+                method: clientReq.method,
+                status,
+                error: `HTTP ${status}`,
+                taskId,
+              });
+            }
             if (!clientRes.headersSent) {
-              clientRes.writeHead(upRes.statusCode || 200, outHeaders);
+              clientRes.writeHead(status, outHeaders);
               clientRes.end(buf);
             }
-            resolve({ status: upRes.statusCode, bodyText, bodyJson });
+            resolve({ status, bodyText, bodyJson });
           });
         },
       );
@@ -1104,6 +1204,15 @@ function startProxyServer(opts) {
           clientRes.statusCode = 502;
           clientRes.end(JSON.stringify({ code: 502, message: e.message }));
         }
+        appendUpstreamFailure({
+          kind: 'connect-error',
+          host: target.hostname,
+          path: target.pathname,
+          method: clientReq.method,
+          error: e.message,
+          message: e.message,
+          taskId,
+        });
         resolve({ error: e.message });
       });
       if (body.length) upstream.write(body);

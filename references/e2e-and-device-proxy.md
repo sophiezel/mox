@@ -4,15 +4,19 @@
 
 ## 桌面 Playwright
 
+可复制样板：[`examples/playwright-mox/`](../examples/playwright-mox/)（config + `set-scenario` + `quality-gate`）。
+
 ```bash
-mox start
+mox start --no-auto-launch
+mox set-scenario e2e-happy
+mox quality-gate
 # 默认打开 http://127.0.0.1:8000；换页用 --start-url=
 ```
 
 Playwright 配置指向本 CLI proxy：
 
 ```js
-// playwright.config.js
+// playwright.config.js — 或复制 examples/playwright-mox/playwright.config.mjs
 export default {
   use: {
     proxy: {
@@ -22,6 +26,16 @@ export default {
   },
 };
 ```
+
+提测口径（Z1）：`mox quality-gate` **exit 0** 才允许宣称可提测；不是字面「0 bug」。
+
+Hybrid 提测建议带可见性旗标（H1）：
+
+```bash
+mox quality-gate --require-mitm-check=https://<catalog-host>/__mox_mitm_check
+```
+
+探针非 ok → exit 1。桌面可不传。前提：App 走系统 Wi‑Fi HTTP 代理且信任用户 CA；Cronet/钉扎非目标。
 
 本地页直连、远端 API 走代理。勿对 `127.0.0.1:<devPort>` 做 HTTPS CONNECT（代理会 `connect-deny-loopback`）。
 

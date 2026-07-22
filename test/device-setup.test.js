@@ -48,6 +48,13 @@ test('buildDeviceHubHtml embeds urls and optional QR', () => {
   assert.match(html, /\.mox\/certs/);
 });
 
+test('buildDeviceHubHtml mentions App WebView mitm-check', () => {
+  const urls = buildDeviceSetupUrls({ lanIp: '10.0.0.2', proxyPort: 18999 });
+  const html = buildDeviceHubHtml({ urls, caFingerprint: 'DEADBEEF' });
+  assert.match(html, /App WebView/i);
+  assert.match(html, /__mox_mitm_check/);
+});
+
 test('qrDataUrl returns png data url', async () => {
   const d = await qrDataUrl('http://10.0.0.1:18999/mox/');
   assert.match(d, /^data:image\/png;base64,/);

@@ -9,6 +9,7 @@
     "injectCaseHeader": "x-mock-case",
     "recordMisses": true,
     "captureScope": "catalog",
+    "mode": "mock-lab",
     "captureNoiseSuffixes": [],
     "passthroughHosts": [],
     "trafficMode": "all-mock",
