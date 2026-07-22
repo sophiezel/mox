@@ -265,3 +265,50 @@ test('PT5: trafficLoader hot-reloads mode without restart', async () => {
     await upstream.close();
   }
 });
+
+test('PT6: rulesLoader hot-reloads rules without restart', async () => {
+  const mock = await listen((req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify({ from: 'mock' }));
+  });
+  const upstream = await listen((req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify({ from: 'upstream' }));
+  });
+  const detailRule = {
+    id: 'GET svc-a/v1/detail',
+    stubId: 'GET svc-a/v1/detail',
+    hosts: ['127.0.0.1'],
+    pathPrefix: '/v1/detail',
+    methods: ['GET'],
+  };
+  let liveRules = [];
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: mock.url,
+    rules: [],
+    missPolicy: 'passthrough',
+    trafficMode: 'all-mock',
+    rulesLoader: () => liveRules,
+    blockWritePassthrough: false,
+  });
+  try {
+    const a = await proxyGet(
+      proxy.port,
+      `http://127.0.0.1:${upstream.port}/v1/detail`,
+    );
+    assert.match(a.body, /upstream/);
+    liveRules = [detailRule];
+    await new Promise((r) => setTimeout(r, 1100)); // TTL
+    const b = await proxyGet(
+      proxy.port,
+      `http://127.0.0.1:${upstream.port}/v1/detail`,
+    );
+    assert.match(b.body, /mock/);
+  } finally {
+    await proxy.close();
+    await mock.close();
+    await upstream.close();
+  }
+});

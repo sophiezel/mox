@@ -221,11 +221,12 @@ async function startSession(opts = {}) {
     }
   }
 
-  const catalogs = resolveActiveCatalogs({
+  let catalogs = resolveActiveCatalogs({
     names: names.length ? names : undefined,
     allIfEmpty: true,
   });
-  const { ensureServiceDirs, ensureDataDirs, auditDir } = require('../lib/paths');
+  const { ensureServiceDirs, ensureDataDirs, auditDir, parseStubId, serviceDataDir } =
+    require('../lib/paths');
   ensureDataDirs();
   for (const key of catalogs) {
     const { services } = expandMountKey(key);
@@ -238,11 +239,31 @@ async function startSession(opts = {}) {
     }
   }
 
-  const merged = mergeCatalogs(catalogs);
+  let merged = mergeCatalogs(catalogs);
   saveSession({ activeCatalogs: catalogs });
 
   if (ruleKeywords.length) {
     applyRulesToSession(ruleKeywords, { rulesDir: opts.rulesDir });
+    // Remount after map upsert: pick up new services + refresh rules seed.
+    if (!names.length) {
+      catalogs = resolveActiveCatalogs({ allIfEmpty: true });
+    } else {
+      const live = loadSession();
+      const extra = [];
+      for (const sid of live.proxy?.mockAllowlist || []) {
+        const parsed = parseStubId(sid);
+        const up = parsed?.upstreamId;
+        if (!up || catalogs.includes(up) || extra.includes(up)) continue;
+        if (
+          fs.existsSync(path.join(serviceDataDir(up), 'proxy-rules.json'))
+        ) {
+          extra.push(up);
+        }
+      }
+      if (extra.length) catalogs = [...catalogs, ...extra];
+    }
+    saveSession({ activeCatalogs: catalogs });
+    merged = mergeCatalogs(catalogs);
   }
   if (opts.captureOpen) {
     const { normalizeProxyMode } = require('../lib/capture-filter');
@@ -300,13 +321,12 @@ async function startSession(opts = {}) {
 
   const primary = catalogs[0];
   const mocksRoot = mocksRootFor(primary);
-  const stubToCatalog = merged.stubToCatalog;
   const resolveMocksRoot = (stubId) => {
-    const slug = stubToCatalog[stubId];
+    const slug = merged.stubToCatalog[stubId];
     return slug ? mocksRootFor(slug) : mocksRoot;
   };
   const resolveCapturesDir = (stubId) => {
-    const slug = stubToCatalog[stubId] || primary;
+    const slug = merged.stubToCatalog[stubId] || primary;
     return capturesDirFor(slug);
   };
 
@@ -375,6 +395,14 @@ async function startSession(opts = {}) {
         mockAllowlist: live.proxy?.mockAllowlist || [],
       };
     };
+    const rulesLoader = () => {
+      const live = loadSession();
+      const cats = resolveActiveCatalogs({
+        names: live.activeCatalogs,
+        allIfEmpty: true,
+      });
+      return mergeCatalogs(cats).rules;
+    };
     const ip = lanIp();
     const scanDirRaw = opts.scanDir || cfg.scanDir || null;
     const scanDir =
@@ -402,6 +430,7 @@ async function startSession(opts = {}) {
       casesLoader,
       statefulLoader,
       trafficLoader,
+      rulesLoader,
       trafficMode: cfg.proxy.trafficMode || 'all-mock',
       mockAllowlist: cfg.proxy.mockAllowlist || [],
       caseHeader: cfg.proxy.injectCaseHeader || 'x-mock-case',

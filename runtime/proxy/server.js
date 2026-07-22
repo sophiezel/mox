@@ -132,6 +132,8 @@ function startProxyServer(opts) {
     mockAllowlist = [],
     /** optional () => ({ trafficMode, mockAllowlist }) from session */
     trafficLoader = null,
+    /** optional () => rules[] from mergeCatalogs (hot-reload like trafficLoader) */
+    rulesLoader = null,
     /**
      * Device hub / PAC public base: { lanIp, port }
      * When missing, derive from request Host header.
@@ -152,6 +154,7 @@ function startProxyServer(opts) {
     mockAllowlist: Array.isArray(mockAllowlist) ? [...mockAllowlist] : [],
   };
   let trafficCacheAt = 0;
+  let rulesCacheAt = 0;
   let statefulEngine = null;
   let statefulFingerprint = '';
 
@@ -223,6 +226,19 @@ function startProxyServer(opts) {
     return activeTraffic;
   }
 
+  function currentRules() {
+    if (!rulesLoader) return activeRules;
+    const now = Date.now();
+    if (now - rulesCacheAt > CASES_TTL_MS) {
+      const live = rulesLoader();
+      if (Array.isArray(live)) {
+        activeRules = live;
+      }
+      rulesCacheAt = now;
+    }
+    return activeRules;
+  }
+
   const mockUrl = new URL(mockTarget);
 
   function logAccess(entry) {
@@ -251,7 +267,7 @@ function startProxyServer(opts) {
       !shouldWriteCapture({
         host: rec.host,
         reason: rec.reason,
-        rules: activeRules,
+        rules: currentRules(),
         captureScope: resolvedCaptureScope,
         recordMisses,
         recordMockHits,
@@ -512,7 +528,7 @@ function startProxyServer(opts) {
       }
 
       const cs = currentCases();
-      const rule = matchRule(activeRules, hostname, urlPath, method, {
+      const rule = matchRule(currentRules(), hostname, urlPath, method, {
         query: Object.fromEntries(target.searchParams),
         headers: req.headers,
         port: reqPort,
@@ -619,7 +635,10 @@ function startProxyServer(opts) {
             timeoutMs: onDemand.timeoutMs || 8000,
             getMergedRules: onDemand.getMergedRules,
             reloadRules: (next) => {
-              if (Array.isArray(next)) activeRules = next;
+              if (Array.isArray(next)) {
+                activeRules = next;
+                rulesCacheAt = 0;
+              }
             },
           });
           if (od.action === 'gap') {
@@ -642,7 +661,7 @@ function startProxyServer(opts) {
             return;
           }
           if (od.action === 'mock') {
-            const nextRule = matchRule(activeRules, hostname, urlPath, method, {
+            const nextRule = matchRule(currentRules(), hostname, urlPath, method, {
               query: Object.fromEntries(target.searchParams),
               headers: req.headers,
               port: reqPort,
@@ -818,7 +837,7 @@ function startProxyServer(opts) {
     // Whistle: Cronet often rejects user CAs — skip MITM and tunnel.
     const ua = String(req.headers['user-agent'] || '');
     const isCronet = /\bCronet\b/i.test(ua);
-    const catalogHit = hostCoveredByRules(activeRules, hostname, portNum);
+    const catalogHit = hostCoveredByRules(currentRules(), hostname, portNum);
     const captureHostHit =
       normalizeProxyMode(mode) === 'capture-open' &&
       Array.isArray(captureMitmHosts) &&
@@ -986,7 +1005,7 @@ function startProxyServer(opts) {
       const search = urlPath.includes('?') ? urlPath.slice(urlPath.indexOf('?')) : '';
       const query = Object.fromEntries(new URL(`http://${hostname}${urlPath}`).searchParams);
       const reqPort = Number(portNum) || 443;
-      const rule = matchRule(activeRules, hostname, pathname, method, {
+      const rule = matchRule(currentRules(), hostname, pathname, method, {
         query,
         headers: req.headers,
         port: reqPort,
@@ -1241,7 +1260,10 @@ function startProxyServer(opts) {
           casesCacheAt = 0;
         },
         reloadRules(nextRules) {
-          activeRules = nextRules;
+          if (Array.isArray(nextRules)) {
+            activeRules = nextRules;
+            rulesCacheAt = 0;
+          }
         },
         setTraffic(next) {
           activeTraffic = {

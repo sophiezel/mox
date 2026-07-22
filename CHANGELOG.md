@@ -13,6 +13,7 @@
 - `--rules` 同样接受 `rules/<name>.txt` Whistle map（与 `.json` stub 包并列；同名优先 `.json`），启动即可，不必先 `map import`。
 - `--rules=a,b`（或空格多值）merge 多个 rule；找不到的 keyword 跳过，不中断启动。
 - `matchRule` pathPrefix 对齐 Whistle `/` 边界（`/v1` 不匹配 `/v1xxx`）。
+- Proxy **rulesLoader**（≤1s TTL）：与 trafficLoader 对称，热读 `mergeCatalogs(activeCatalogs)`；`start --rules` / `map import` / `rules use` 后无需重启即可命中新 path。
 - Upstream failure journal：MITM 透传连接失败与 HTTP≥400 追加 `.data/reports/upstream-failures.jsonl`（不 merge 合同）。
 - Playwright 样板：`examples/playwright-mox/`。
 
