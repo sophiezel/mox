@@ -11,6 +11,7 @@ const {
   formatDeviceCaHints,
   readCaDownloadFiles,
   CA_COMMON_NAME,
+  caHasKeyCertSign,
 } = require('../lib/mitm-ca');
 
 test('ensureCa writes CA pem', () => {
@@ -18,6 +19,19 @@ test('ensureCa writes CA pem', () => {
   assert.ok(fs.existsSync(certPath));
   assert.ok(fs.existsSync(keyPath));
   assert.match(fs.readFileSync(certPath, 'utf8'), /BEGIN CERTIFICATE/);
+});
+
+test('ensureCa CA includes keyCertSign (Android / Whistle-compatible)', () => {
+  const { caHasKeyCertSign, ensureCa: ensure } = require('../lib/mitm-ca');
+  const { certPath } = ensure({ forceRegen: true });
+  assert.equal(caHasKeyCertSign(certPath), true);
+  const text = require('child_process')
+    .spawnSync('openssl', ['x509', '-in', certPath, '-noout', '-text'], {
+      encoding: 'utf8',
+    })
+    .stdout;
+  assert.match(text, /CA:TRUE/);
+  assert.match(text, /Cert(?:ificate)? Sign/i);
 });
 
 test('isCaTrusted is read-only (no security writes)', () => {

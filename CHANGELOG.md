@@ -15,7 +15,8 @@
 ### Fixed
 - HTTPS CONNECT：按 catalog `hosts[]` 覆盖做 MITM；本机绑定下未覆盖 host 自动隧道透传。
 - Chromium bypass 为显式 `127.0.0.1;localhost;::1`；CONNECT loopback 拒绝。
-- MITM CORS：OPTIONS 预检在 MITM 桥接处理。
+- MITM CORS：OPTIONS 预检在 MITM 桥接处理；**默认 `reflectOrigin` 回显任意 Origin**（远程 H5 不再因白名单丢 ACAO）；`reflectOrigin: false` 退回 localhost/`extraOrigins`。
+- MITM CA：生成时补齐 `keyUsage=keyCertSign`（对齐 Whistle/mitmproxy）；缺扩展的旧 CA 会自动重签。Android「用户」凭据下此前会拒链（不是用户 CA 不能用）。MITM TLS 强制 ALPN `http/1.1`。
 - `Ctrl+C` 快速退出（`closeAllConnections` + 超时）。
 
 ### Added

@@ -121,7 +121,9 @@ mox start
 
 ## CORS
 
-localhost / 127.0.0.1 Origin 默认放行；OPTIONS → 204；credentials 回显 Origin。Hybrid WebView 非 localhost Origin 走 `cors.extraOrigins`。
+默认 **`reflectOrigin: true`**：有 `Origin` 则回显 `Access-Control-Allow-Origin`（任意域名，本地 mock DX）。OPTIONS → 204；credentials 同步开启。
+
+`reflectOrigin: false` 时退回 localhost + `cors.extraOrigins` 白名单。
 
 ## soft 未命中 / 录制
 

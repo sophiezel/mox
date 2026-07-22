@@ -254,6 +254,94 @@ test('CONNECT MITM OPTIONS preflight returns CORS for localhost origin', async (
   }
 });
 
+test('CONNECT MITM OPTIONS reflects remote Origin by default', async () => {
+  const { createMitmCa } = require('../lib/mitm-ca');
+  const tls = require('tls');
+  const ca = createMitmCa();
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: 'http://127.0.0.1:9',
+    rules: [
+      {
+        id: 'POST svc/api/q',
+        hosts: ['svc.example.com'],
+        pathPrefix: '/api/q',
+        methods: ['POST'],
+      },
+    ],
+    missPolicy: 'passthrough',
+    allowOpenProxy: false,
+    cors: {}, // default reflectOrigin
+    mitm: {
+      enabled: true,
+      getSecureContext: (h) => ca.getSecureContext(h),
+    },
+  });
+  try {
+    const raw = net.connect(proxy.port, '127.0.0.1');
+    await new Promise((r, j) => {
+      raw.once('connect', r);
+      raw.once('error', j);
+    });
+    raw.write(
+      'CONNECT svc.example.com:443 HTTP/1.1\r\nHost: svc.example.com:443\r\n\r\n',
+    );
+    await new Promise((resolve, reject) => {
+      let buf = '';
+      const onData = (c) => {
+        buf += c.toString('utf8');
+        if (buf.includes('\r\n\r\n')) {
+          raw.off('data', onData);
+          if (/200 Connection Established/i.test(buf)) resolve();
+          else reject(new Error(buf));
+        }
+      };
+      raw.on('data', onData);
+      raw.on('error', reject);
+      setTimeout(() => reject(new Error('CONNECT timeout')), 5000);
+    });
+
+    const tlsSock = tls.connect({
+      socket: raw,
+      servername: 'svc.example.com',
+      rejectUnauthorized: false,
+    });
+    await new Promise((r, j) => {
+      tlsSock.once('secureConnect', r);
+      tlsSock.once('error', j);
+    });
+
+    const remoteOrigin = 'https://ping-fe.example.com';
+    tlsSock.write(
+      'OPTIONS /api/q HTTP/1.1\r\n' +
+        'Host: svc.example.com\r\n' +
+        `Origin: ${remoteOrigin}\r\n` +
+        'Access-Control-Request-Method: POST\r\n' +
+        'Access-Control-Request-Headers: content-type\r\n' +
+        '\r\n',
+    );
+
+    const resBuf = await new Promise((resolve, reject) => {
+      let buf = '';
+      tlsSock.on('data', (c) => {
+        buf += c.toString('utf8');
+        if (buf.includes('\r\n\r\n')) resolve(buf);
+      });
+      tlsSock.on('error', reject);
+      setTimeout(() => reject(new Error(`OPTIONS timeout buf=${buf}`)), 5000);
+    });
+    assert.match(resBuf, /HTTP\/1\.1 204/);
+    assert.match(
+      resBuf,
+      /Access-Control-Allow-Origin:\s*https:\/\/ping-fe\.example\.com/i,
+    );
+    tlsSock.end();
+  } finally {
+    await proxy.close();
+  }
+});
+
 test('CONNECT MITM path taken when host covered (pathPrefix irrelevant)', async () => {
   let mitmHost = null;
   const proxy = await startProxyServer({

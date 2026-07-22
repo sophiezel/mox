@@ -31,7 +31,8 @@
   "cors": {
     "allowLocalhost": true,
     "extraOrigins": [],
-    "allowCredentials": true
+    "allowCredentials": true,
+    "reflectOrigin": true
   },
   "cases": {
     "default": "success",

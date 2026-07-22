@@ -50,7 +50,7 @@ disable-model-invocation: true
 - [ ] modify 冲突：展示 `reports/contract-conflicts.md`，未决议不覆盖
 - [ ] 不改业务仓（除非用户明确 `--write-project-config`）
 - [ ] 不依赖 Whistle/Charles；真机 Wi‑Fi 代理 → `proxyPort`
-- [ ] CORS 默认 localhost；Hybrid 非 localhost Origin → `cors.extraOrigins`
+- [ ] CORS 默认 `reflectOrigin` 回显任意 Origin；严格白名单用 `reflectOrigin: false` + `extraOrigins`
 - [ ] soft miss：透传 + capture，不因单接口拖垮 session
 - [ ] **E2E 前显式 `scenario` / `set-scenario`**；勿只生成 success 就宣称可测异常路径
 - [ ] `coverage.gaps` 非空时**不宣称 IO 完备**（含 `TRACE_EMPTY`）；需要真实值时显式 `merge` / `capture-merge`（以 capture 为准，非补洞）

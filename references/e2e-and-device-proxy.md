@@ -93,20 +93,21 @@ mox start
 生产 H5 几乎全是 HTTPS——真机要 mock 须安装 CA（或 HTTP 调试域）。
 ## CORS / Hybrid WebView
 
-WebView `Origin` 常非 localhost（`null`、自定义 scheme、`https://localhost` 壳）。默认仅放行 localhost。
+默认 **`cors.reflectOrigin: true`**：本地 proxy/mock 回显请求 `Origin`（任意 H5 域，不硬编码业务域名），远程页跨域 mock 可直接用。
 
-非 localhost Origin 在 `session.json` 配置：
+需要旧白名单时：
 
 ```json
 {
   "cors": {
+    "reflectOrigin": false,
     "allowLocalhost": true,
     "extraOrigins": ["https://your-h5-host", "*.your-app-scheme"]
   }
 }
 ```
 
-不实现「万能 Origin」；按需显式加。
+不使用 `Access-Control-Allow-Origin: *`（credentials 需回显具体 Origin）。
 
 ## Appium 真机 E2E
 

@@ -1,7 +1,7 @@
 # Pitfalls
 
 1. **用错浏览器** — 日常 Chrome 不走 proxy；看流量门禁/access log
-2. **CORS** — 代理未注入 CORS 会导致 localhost 跨域失败；Hybrid WebView Origin 非 localhost 时需配 `cors.extraOrigins`
+2. **CORS** — 默认 `reflectOrigin` 回显任意 Origin；若设 `reflectOrigin: false` 又未配 `extraOrigins`，远程 H5 会被浏览器拦跨域
 3. **HTTPS MITM** — v1 对 HTTPS 仅 CONNECT tunnel，不改写响应；mock 规则优先进 HTTP/可拦路径
 4. **new 无文档** — 禁止臆造；task 模式下 BLOCK
 5. **端口占用** — start 前探测，失败即报错

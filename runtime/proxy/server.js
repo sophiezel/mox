@@ -752,8 +752,15 @@ function startProxyServer(opts) {
         const tlsSock = new tls.TLSSocket(clientSocket, {
           isServer: true,
           secureContext: ctx,
+          ALPNProtocols: ['http/1.1'],
         });
-        tlsSock.on('error', () => {
+        tlsSock.on('error', (err) => {
+          logAccess({
+            action: 'connect-mitm-tls-error',
+            method: 'CONNECT',
+            url: req.url,
+            error: err && err.message,
+          });
           try {
             clientSocket.end();
           } catch (_) {

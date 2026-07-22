@@ -104,7 +104,7 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 | LAN 安全 | 默认 `allowOpenProxy=true`；公共 Wi‑Fi 勿用；收紧用 `--no-open-proxy` |
 | mock 命中 | `.data/services/<upstreamId>/mocks/<METHOD>/<path>/index.js` |
 | miss | soft：透传 + capture 写入 `services/<up>/captures/`，不因单接口拖垮 session |
-| CORS | 默认 localhost Origin；OPTIONS → 204；Hybrid WebView 非 localhost Origin 走 `cors.extraOrigins`（不实现「万能 Origin」） |
+| CORS | **默认 `reflectOrigin: true`**：本地 proxy/mock 回显请求 Origin（任意 H5 域，不硬编码业务域名）；`reflectOrigin: false` 退回 localhost + `extraOrigins` 白名单。OPTIONS → 204。不使用 `*`（credentials 需具体 Origin） |
 | HTTPS | 默认 MITM（catalog hosts）；CA 在 `.data/mitm/`；首次 `mox start` 写入 System.keychain；真机下 `/mox/ca.cer`；`--mitm=0` 关闭；Chrome 无 ignore-certificate 旗标 |
 | E2E scenario 隔离 | 一 worker 一 session，或用例 `beforeEach`/`afterEach` `set-scenario` 复位；不建分布式锁 |
 
