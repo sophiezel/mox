@@ -125,6 +125,15 @@ function startProxyServer(opts) {
     mockAllowlist = [],
     /** optional () => ({ trafficMode, mockAllowlist }) from session */
     trafficLoader = null,
+    /**
+     * Device hub / PAC public base: { lanIp, port }
+     * When missing, derive from request Host header.
+     */
+    deviceSetup = null,
+    /**
+     * On-demand page mock: { enabled, scanDir, timeoutMs, getMergedRules }
+     */
+    onDemand = null,
   } = opts;
 
   let activeRules = rules.length ? rules : loadRules(rulesPath);
@@ -288,6 +297,81 @@ function startProxyServer(opts) {
         }
         return noQuery;
       })();
+
+      function resolveDeviceUrls() {
+        const {
+          buildDeviceSetupUrls,
+        } = require('../../lib/device-setup');
+        if (deviceSetup?.lanIp) {
+          return buildDeviceSetupUrls({
+            lanIp: deviceSetup.lanIp,
+            proxyPort: deviceSetup.port || port,
+          });
+        }
+        const hostHdr = String(req.headers.host || '')
+          .split(':')[0]
+          .trim();
+        const lan =
+          hostHdr && hostHdr !== '0.0.0.0' && hostHdr !== '127.0.0.1'
+            ? hostHdr
+            : null;
+        return buildDeviceSetupUrls({
+          lanIp: lan,
+          proxyPort: deviceSetup?.port || port,
+        });
+      }
+
+      // Device setup hub + PAC (absolute URL compatible via pathOnly)
+      if (
+        req.method === 'GET' &&
+        (pathOnly === '/mox' || pathOnly === '/mox/')
+      ) {
+        try {
+          const {
+            buildDeviceHubHtml,
+            qrDataUrl,
+          } = require('../../lib/device-setup');
+          const urls = resolveDeviceUrls();
+          const [caQrDataUrl, pacQrDataUrl] = await Promise.all([
+            urls.caCer ? qrDataUrl(urls.caCer) : null,
+            urls.pac ? qrDataUrl(urls.pac) : null,
+          ]);
+          const html = buildDeviceHubHtml({ urls, caQrDataUrl, pacQrDataUrl });
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+          });
+          res.end(html);
+          logAccess({ action: 'mox-hub', method: 'GET', url: pathOnly });
+        } catch (e) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ code: 503, message: e.message }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathOnly === '/mox/proxy.pac') {
+        try {
+          const { buildPacScript } = require('../../lib/device-setup');
+          const urls = resolveDeviceUrls();
+          const pacHost = urls.lanIp || '127.0.0.1';
+          const pac = buildPacScript({
+            host: pacHost,
+            port: urls.proxyPort || port,
+          });
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ns-proxy-autoconfig',
+            'Cache-Control': 'no-store',
+          });
+          res.end(pac);
+          logAccess({ action: 'mox-pac', method: 'GET', url: pathOnly });
+        } catch (e) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ code: 503, message: e.message }));
+        }
+        return;
+      }
+
       // Device / desktop CA download (relative or absolute URL to this proxy)
       if (
         req.method === 'GET' &&
@@ -459,6 +543,128 @@ function startProxyServer(opts) {
       const trafficReason = rule
         ? trafficPassthroughReason(currentTraffic().trafficMode)
         : 'miss';
+
+      // On-demand: page-prereq miss → sync generate from frontend scanDir
+      if (
+        !rule &&
+        onDemand?.enabled &&
+        onDemand.scanDir &&
+        typeof onDemand.getMergedRules === 'function'
+      ) {
+        try {
+          const { handleOnDemandMiss } = require('../../lib/on-demand-miss');
+          const od = await handleOnDemandMiss({
+            scanDir: onDemand.scanDir,
+            method,
+            host: hostname,
+            path: urlPath,
+            referer: req.headers.referer || req.headers.referrer || null,
+            timeoutMs: onDemand.timeoutMs || 8000,
+            getMergedRules: onDemand.getMergedRules,
+            reloadRules: (next) => {
+              if (Array.isArray(next)) activeRules = next;
+            },
+          });
+          if (od.action === 'gap') {
+            applyCorsHeaders(req, res, cors);
+            res.statusCode = 503;
+            res.end(
+              JSON.stringify({
+                code: 503,
+                message: 'on-demand mock gap; no invent fields',
+                gap: od.gap || 'TRACE_EMPTY',
+                data: null,
+              }),
+            );
+            logAccess({
+              action: 'on-demand-gap',
+              method,
+              url: target.href,
+              gap: od.gap,
+            });
+            return;
+          }
+          if (od.action === 'mock') {
+            const nextRule = matchRule(activeRules, hostname, urlPath, method, {
+              query: Object.fromEntries(target.searchParams),
+              headers: req.headers,
+              port: reqPort,
+            });
+            if (nextRule && ruleShouldMock(nextRule)) {
+              const caseId = resolveCaseId(
+                cs,
+                nextRule,
+                method,
+                hostname,
+                urlPath,
+              );
+              const headers = { ...req.headers };
+              headers.host = mockUrl.host;
+              headers['x-forwarded-host'] = hostname;
+              headers[caseHeader] = caseId;
+              if (nextRule.stubId) {
+                headers['x-mock-stub-id'] = encodeURIComponent(nextRule.stubId);
+              }
+              if (nextRule.upstreamId) {
+                headers['x-mock-upstream'] = nextRule.upstreamId;
+              }
+              delete headers['content-length'];
+              const mockPath = urlPath + target.search;
+              const mockReq = http.request(
+                {
+                  protocol: mockUrl.protocol,
+                  hostname: mockUrl.hostname,
+                  port: mockUrl.port,
+                  path: mockPath,
+                  method,
+                  headers,
+                  timeout: upstreamTimeoutMs,
+                },
+                (mockRes) => {
+                  applyCorsHeaders(req, res, cors);
+                  const outHeaders = { ...mockRes.headers };
+                  delete outHeaders['access-control-allow-origin'];
+                  const chunks = [];
+                  mockRes.on('data', (c) => chunks.push(c));
+                  mockRes.on('end', () => {
+                    const buf = Buffer.concat(chunks);
+                    res.writeHead(mockRes.statusCode || 200, outHeaders);
+                    res.end(buf);
+                  });
+                },
+              );
+              mockReq.on('timeout', () => {
+                mockReq.destroy(new Error('mock upstream timeout'));
+              });
+              mockReq.on('error', (e) => {
+                applyCorsHeaders(req, res, cors);
+                if (!res.headersSent) {
+                  res.statusCode = 502;
+                  res.end(JSON.stringify({ code: 502, message: e.message }));
+                }
+              });
+              if (body.length) mockReq.write(body);
+              mockReq.end();
+              logAccess({
+                action: 'on-demand-mock',
+                method,
+                url: target.href,
+                caseId,
+                ruleId: nextRule.id,
+                stubId: od.stubId,
+              });
+              return;
+            }
+            logAccess({
+              action: 'on-demand-no-rule-after-gen',
+              method,
+              url: target.href,
+            });
+          }
+        } catch (e) {
+          console.warn(`[proxy] on-demand miss hook error: ${e.message}`);
+        }
+      }
 
       const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
       if (isWrite && blockWritePassthrough && forcedMissPolicy !== 'reject') {

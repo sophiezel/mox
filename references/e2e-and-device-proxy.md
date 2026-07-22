@@ -51,7 +51,9 @@ test.afterAll(() => {
 });
 ```
 
-## 真机 WebView（Wi‑Fi 手动代理）
+## 真机 WebView（扫码接入：CA + 代理）
+
+**现实约束**：系统 Wi‑Fi「手动 HTTP 代理」没有跨厂商「扫一码写死 host:port」的标准能力。本工具做到：扫码装 CA + PAC URL 少手输；不承诺零点击写入手动代理。
 
 1. 电脑与真机同一局域网
 2. 日常直接启动（默认 `0.0.0.0` + 开放 CONNECT，同 Whistle）：
@@ -62,14 +64,16 @@ mox start
 # 收紧 LAN CONNECT：--no-open-proxy
 ```
 
-3. 启动日志打印真实 Wi‑Fi 代理 `IP:port` 与 CA URL，在手机 Wi‑Fi → 手动代理 填写
-4. **手机必须安装与电脑相同的 MITM CA**（MITM 默认开启）：
-   - 手机浏览器打开日志中的 `http://<真实LAN_IP>:<proxyPort>/mox/ca.cer` 下载安装
+3. 启动日志打印 `Wi-Fi 代理`、`接入页`、`CA`、`PAC`，并输出 **一张接入页 ASCII 二维码**（用手机扫电脑屏即可）
+4. 手机打开接入页 `http://<LAN>:<port>/mox/`（或扫终端 QR）：
+   - **先装 CA**：页内 QR / 按钮 → `/mox/ca.cer`
+   - **再设代理**：选手动填 `IP:port`，或 Wi‑Fi「自动/PAC」扫码/粘贴 `/mox/proxy.pac`（比手敲 IP:port 稳）
+5. **CA 信任**（MITM 默认开启，电脑与手机同一份 CA）：
    - **iOS**：安装描述文件 → **设置 → 通用 → 关于本机 → 证书信任设置** → 对 `mox Local MITM CA` 打开完全信任
    - **Android**：设置 → 安全 → 安装证书 → CA；注意许多 App/WebView **不信任用户 CA**
-5. 手机 WebView 打开 H5，请求经 mox → mock / 透传
+6. 手机 WebView 打开 H5，请求经 mox → mock / 透传
 
-电脑首次 `mox start` 会自动把 CA 写入 System.keychain（一次管理员密码）；重试用 `mox trust-ca`。
+已开代理时仍可用绝对 URL 下 CA（pathname 解析兼容）。电脑首次 `mox start` 会自动把 CA 写入 System.keychain（一次管理员密码）；重试用 `mox trust-ca`。
 
 ### 安全提示
 

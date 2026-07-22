@@ -15,6 +15,20 @@
 - `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）；可与 `--record` 同用（仍 selective，只录透传）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
 - `--traffic=all-mock|all-passthrough|selective` 启动时流量模式（写入全局 session）
+- `--scan-dir=DIR`（覆盖 session 中的 `scanDir`）：启用 **miss 时按页面源码即时 mock**
+
+## On-demand page mock（miss → 源码）
+
+前提：`mox init <frontend>` 会把 `scanDir` 写入 `.data/session.json`；或启动时 `--scan-dir=`。
+
+当请求无 rule 命中时：
+
+1. 用 `Referer` 收敛到前端页面文件，再有界跟 import 做模块图
+2. 倒推该页 API（调用链 + 响应解构）；**页面前置**（`onMounted` / `setup` / `useEffect([])` 等）**阻塞生成**并立刻返回 materialize mock
+3. **非前置**（点击等事件回调）静默落盘，本次仍走 `missPolicy`
+4. 扫不到字段（`TRACE_EMPTY` / empty shape）**不臆造**：前置返回 **503** + `gap`
+
+无 `scanDir` 或页映射失败 → 行为与原来一致（passthrough / reject）。
 
 ## 共享 rules
 

@@ -17,6 +17,7 @@ const {
   listExistingMockKeys,
 } = require('./generate-mock');
 const { copyBuiltinScenarios } = require('../lib/scenario');
+const { saveSession } = require('../lib/session-config');
 
 async function initProject(opts = {}) {
   const projectDir = path.resolve(opts.projectDir || process.cwd());
@@ -37,6 +38,12 @@ async function initProject(opts = {}) {
 
   console.log(`[mox] init scanDir=${projectDir}`);
   console.log(`[mox] label=${scanLabel} taskId=${taskId || 'adhoc'}`);
+
+  // Persist for on-demand miss → page source scan during `mox start`
+  saveSession({
+    scanDir: projectDir,
+    scanLabel,
+  });
 
   const apis = inferApiUsage(projectDir, {
     withUsageIo: true,

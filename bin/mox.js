@@ -69,7 +69,7 @@ mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
   mox init [scanDir] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scenario=NAME] [--proxy-host=HOST] [--mitm=0] [--keep-state] [--detach]
+  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scan-dir=DIR] [--scenario=NAME] [--proxy-host=HOST] [--mitm=0] [--keep-state] [--detach]
   mox stop [--auto-merge]
   mox rules list|use <kw…>|save <name> [--rules-dir=DIR]
   mox scenario <name>
@@ -279,6 +279,7 @@ async function runSessionStart(f) {
     proxyHost: f['proxy-host'],
     proxy: f.proxy,
     startUrl: f['start-url'],
+    scanDir: f['scan-dir'] || undefined,
     autoLaunch: f['no-auto-launch'] ? false : undefined,
     scenario: f.scenario,
     allowOpenProxy: f['no-open-proxy']

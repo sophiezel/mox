@@ -404,6 +404,77 @@ test('GET /mox/ca.cer serves DER CA; /__mox__/ alias still works', async () => {
   }
 });
 
+test('GET /mox/ hub and /mox/proxy.pac (absolute URL compatible)', async () => {
+  const proxy = await startProxyServer({
+    host: '127.0.0.1',
+    port: 0,
+    mockTarget: 'http://127.0.0.1:9',
+    rules: [],
+    missPolicy: 'passthrough',
+    allowOpenProxy: true,
+    deviceSetup: { lanIp: '10.0.0.9', port: null },
+  });
+  try {
+    const get = (path) =>
+      new Promise((resolve, reject) => {
+        http
+          .get(`http://127.0.0.1:${proxy.port}${path}`, (r) => {
+            const chunks = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () =>
+              resolve({
+                status: r.statusCode,
+                type: r.headers['content-type'],
+                body: Buffer.concat(chunks).toString('utf8'),
+              }),
+            );
+          })
+          .on('error', reject);
+      });
+
+    const hub = await get('/mox/');
+    assert.equal(hub.status, 200);
+    assert.match(String(hub.type), /text\/html/i);
+    assert.match(hub.body, /10\.0\.0\.9/);
+    assert.match(hub.body, /mox\/ca\.cer/);
+    assert.match(hub.body, /mox\/proxy\.pac/);
+
+    const pac = await get('/mox/proxy.pac');
+    assert.equal(pac.status, 200);
+    assert.match(String(pac.type), /proxy-autoconfig|javascript|ns-proxy/i);
+    assert.match(pac.body, /FindProxyForURL/);
+    assert.match(pac.body, /PROXY 10\.0\.0\.9:/);
+
+    const absPac = await new Promise((resolve, reject) => {
+      http
+        .request(
+          {
+            hostname: '127.0.0.1',
+            port: proxy.port,
+            path: `http://10.0.0.9:${proxy.port}/mox/proxy.pac`,
+            method: 'GET',
+          },
+          (r) => {
+            const chunks = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () =>
+              resolve({
+                status: r.statusCode,
+                body: Buffer.concat(chunks).toString('utf8'),
+              }),
+            );
+          },
+        )
+        .on('error', reject)
+        .end();
+    });
+    assert.equal(absPac.status, 200);
+    assert.match(absPac.body, /PROXY 10\.0\.0\.9:/);
+  } finally {
+    await proxy.close();
+  }
+});
+
 test('captureScope=catalog drops uncovered host misses', async () => {
   const fs = require('fs');
   const os = require('os');

@@ -158,6 +158,9 @@ function applySessionOpts(base, opts = {}) {
   if (opts.recordMockHits === true) {
     patch.proxy = { ...(patch.proxy || {}), recordMockHits: true };
   }
+  if (opts.scanDir) {
+    patch.scanDir = path.resolve(String(opts.scanDir));
+  }
   if (opts.traffic) {
     const { normalizeTrafficMode } = require('../lib/traffic-mode');
     patch.proxy = {
@@ -350,6 +353,23 @@ async function startSession(opts = {}) {
         mockAllowlist: live.proxy?.mockAllowlist || [],
       };
     };
+    const ip = lanIp();
+    const scanDirRaw = opts.scanDir || cfg.scanDir || null;
+    const scanDir =
+      scanDirRaw && fs.existsSync(path.resolve(String(scanDirRaw)))
+        ? path.resolve(String(scanDirRaw))
+        : null;
+    if (scanDirRaw && !scanDir) {
+      console.warn(
+        `[mox] scanDir not found (${scanDirRaw}); on-demand page mock disabled`,
+      );
+    } else if (scanDir) {
+      console.log(`[mox] on-demand scanDir=${scanDir}`);
+    } else {
+      console.log(
+        '[mox] on-demand page mock off (no scanDir; run mox init <frontend> or --scan-dir=)',
+      );
+    }
     proxy = await startProxyServer({
       host: proxyHost,
       port: proxyPort,
@@ -377,20 +397,41 @@ async function startSession(opts = {}) {
       resolveCapturesDir,
       taskId,
       accessLogPath: path.join(auditDir(), 'proxy-access.jsonl'),
+      deviceSetup: ip ? { lanIp: ip, port: proxyPort } : { lanIp: null, port: proxyPort },
+      onDemand: scanDir
+        ? {
+            enabled: true,
+            scanDir,
+            timeoutMs: Number(cfg.proxy?.onDemandTimeoutMs) || 8000,
+            getMergedRules: () => {
+              const live = loadSession();
+              const cats = resolveActiveCatalogs({
+                names: live.activeCatalogs,
+                allIfEmpty: true,
+              });
+              return mergeCatalogs(cats).rules;
+            },
+          }
+        : { enabled: false },
     });
     console.log(
       `[mox] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,
     );
     {
-      const ip = lanIp();
+      const {
+        buildDeviceSetupUrls,
+        printHubQrToTerminal,
+      } = require('../lib/device-setup');
+      const urls = buildDeviceSetupUrls({ lanIp: ip, proxyPort });
       const scenarioLabel = cfg.scenario || opts.scenario || '(unset)';
       const wifiHost = ip || resolveClientProxyHost(proxyHost);
       console.log('');
-      console.log('===【真机 Wi‑Fi 代理】手机 Wi‑Fi 手动代理填写===');
+      console.log('===【真机接入】扫码或手填===');
       if (ip) {
-        console.log(`  host: ${ip}`);
-        console.log(`  port: ${proxyPort}`);
-        console.log(`  Wi-Fi 代理: ${ip}:${proxyPort}`);
+        console.log(`  Wi-Fi 代理: ${urls.wifiProxy}`);
+        console.log(`  接入页: ${urls.hub}`);
+        console.log(`  CA: ${urls.caCer}`);
+        console.log(`  PAC: ${urls.pac}`);
       } else {
         console.log(`  host: (未检测到局域网 IP；本机可用 ${wifiHost})`);
         console.log(`  port: ${proxyPort}`);
@@ -404,21 +445,18 @@ async function startSession(opts = {}) {
       if (!allowOpenProxy) {
         console.log('  missPolicy/CONNECT 已收紧（--no-open-proxy）；CONNECT 仅放行 passthroughHosts');
       }
+      console.log('  推荐：先扫下方二维码打开接入页 → 装 CA → 再设代理（手动 IP:port 或自动 PAC）');
       if (mitm?.caCertPath) {
-        console.log(`  HTTPS MITM CA（电脑+手机同一份）: ${mitm.caCertPath}`);
-        if (ip) {
-          const base = `http://${ip}:${proxyPort}`;
-          console.log(`  手机安装: ${base}/mox/ca.cer`);
-        } else {
-          console.log(
-            `  手机安装: http://<电脑局域网IP>:${proxyPort}/mox/ca.cer（先确认电脑与手机同网）`,
-          );
-        }
-        console.log('  iOS: 安装后 → 设置 → 通用 → 关于本机 → 证书信任设置 → 打开完全信任');
+        console.log(`  HTTPS MITM CA 文件: ${mitm.caCertPath}`);
+        console.log('  iOS: CA 安装后 → 设置 → 通用 → 关于本机 → 证书信任设置 → 完全信任');
         console.log('  Android: 设置 → 安全 → 安装证书 → CA；WebView 可能仍不信任用户 CA');
-        console.log('  电脑重试: 再执行一次 mox start（或 mox trust-ca）');
       } else {
         console.log('  HTTPS: 当前未启用 MITM（--mitm=0）；catalog host 无法改写');
+      }
+      if (urls.hub) {
+        console.log('');
+        console.log('  [扫码打开接入页]');
+        await printHubQrToTerminal(urls.hub);
       }
       console.log('');
     }

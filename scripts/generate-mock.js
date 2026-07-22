@@ -974,6 +974,8 @@ function generateMocks({
     reused,
     // Project aggregate proxy-rules no longer written; truth is services/<up>/proxy-rules.json
     rulesPath: null,
+    rules,
+    stubIds,
     removedGateway,
     usageBackedCount,
     emptyDataCount,
