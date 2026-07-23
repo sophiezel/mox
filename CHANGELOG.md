@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Sticky rule packs：本地 `.data/rules-active`（一行一包名，`#` 注释）；`mox rules use` / `start --rules` 写入；plain `mox start` 自动重 apply；`mox rules clear` 清空并回 `all-mock`。
 - `mox device prepare`：ADB 设 `http_proxy`、push CA、打印 App WebView `__mox_mitm_check`（不输 PIN；H1）。
 - `quality-gate --require-mitm-check=<url>`：Hybrid 可见性探针。
 - Scenario `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quality-gate` 失败。

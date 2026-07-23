@@ -26,7 +26,8 @@ mox stop
 mox start --name=demo --rules my-pack
 mox start --rules=csp-trade,csp-tasks   # .json / Whistle .txt；缺失跳过
 # 或运行中：
-mox rules use my-pack
+mox rules use my-pack                   # sticky → .data/rules-active；之后 plain start 即可
+mox rules clear
 mox map import ./whistle-map.txt
 ```
 

@@ -2,9 +2,10 @@
 
 ## 模型
 
-- **一个**全局 session（`.data/session.json`）：端口、`trafficMode`、`mockAllowlist`、`cases`、`activeCatalogs`。
+- **一个**全局 session（`.data/session.json`）：端口、`trafficMode`、`mockAllowlist`、`cases`、`activeCatalogs`、派生 `activeRules`（展示用）。
 - Catalog **真源**在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`。`start --name=<upstreamId…>` 可同时挂多服务；省略 = 全部。
-- 共享 rule 包在包根 `rules/`（见下）。
+- 共享 rule 包在包根 `rules/`（可 git）。
+- **启用偏好**在本地 `.data/rules-active`（一行一包名；`#` 整行注释；不进 git）。与 session 分离：意图 vs 运行快照。
 
 ## 开关
 
@@ -12,7 +13,8 @@
 - `--mock-port` / `--proxy-port`（**代理入口端口**，与规则里的上游目标 port 正交）
 - `--proxy-host`（默认 `0.0.0.0`；仅本机用 `127.0.0.1`）
 - `--name=a --name=b`（或 `--name=a,b`）挂载 catalog；省略 = 全部
-- `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`）：`rules/<name>.json` stub 包，或 Whistle-like `rules/<name>.txt` map（单列 pattern 或可选第二列本地标记）；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
+- `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`），并写入 `.data/rules-active`：`rules/<name>.json` stub 包，或 Whistle-like `rules/<name>.txt` map；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
+- 无 `--rules` 时若 `.data/rules-active` 非空 → plain `mox start` **重 apply**（覆盖上次 `mox traffic` 对手工 allowlist 的改动）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
 - `--traffic=all-mock|all-passthrough|selective` 启动时流量模式（写入全局 session）
 - `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 明文落盘；map/allowlist 仍可强制 mock）。**不等于**全透传；纯全透传请用 `mox traffic all-passthrough` 或 `--traffic=all-passthrough`
@@ -47,11 +49,13 @@ mox traffic all-passthrough          # 纯全透传（不再由 --capture-open �
 ## 共享 rules
 
 ```bash
-mox start --name=tower --name=other --rules jian-h5 xrk
-mox start --rules jian-h5 --capture-open   # selective mock + capture-open capture
-mox rules use jian-h5 xrk
+mox rules use csp-trade              # apply + 写入 .data/rules-active
+mox start                            # 无 --rules 时自动套 sticky packs
+mox start --name=tower --rules jian-h5 xrk
+mox start --rules jian-h5 --capture-open   # selective mock + capture-open
 mox rules list
 mox rules save my-pack
+mox rules clear                      # 清 sticky + session 回 all-mock
 ```
 
 文件：`<pkg>/rules/<name>.json` stub 包，或同名 `.txt` Whistle map（`--rules-dir=` / `MOX_RULES_DIR` 可改；同名时优先 `.json`）：
@@ -63,7 +67,14 @@ mox rules save my-pack
 }
 ```
 
-多关键字 → stubs **并集**；写全局 session 后 ≤1s 热生效。改磁盘文件需再 `rules use`。
+Sticky 偏好（本地，不进 git）：
+
+```text
+# .data/rules-active
+csp-trade
+```
+
+多关键字 → stubs **并集**；写全局 session 后 ≤1s 热生效。改 `rules/*` 磁盘文件后 plain `start` / 再 `rules use` 会重 apply。`mox traffic allow/deny` 只改 session；有 sticky 时下次 start 会按 packs 覆盖。
 
 ## 流量模式（WireMock proxy/intercept）
 

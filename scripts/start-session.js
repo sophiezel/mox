@@ -26,10 +26,11 @@ const {
   parseNameList,
   expandMountKey,
 } = require('../lib/catalog-merge');
+const { applyRulesToSession } = require('../lib/rules');
 const {
-  parseRulesKeywords,
-  applyRulesToSession,
-} = require('../lib/rules');
+  resolveStartRuleKeywords,
+  saveRulesActive,
+} = require('../lib/rules-active');
 const { startMockServer } = require('../runtime/mock-server/server');
 const { startProxyServer } = require('../runtime/proxy/server');
 const {
@@ -193,7 +194,8 @@ function applySessionOpts(base, opts = {}) {
 async function startSession(opts = {}) {
   const taskId = opts.taskId || null;
   const names = parseNameList(opts.names != null ? opts.names : opts.name);
-  const ruleKeywords = parseRulesKeywords(opts.rules);
+  const { keywords: ruleKeywords, source: rulesSource } =
+    resolveStartRuleKeywords(opts);
   const keepState =
     opts.keepState === true ||
     opts['keep-state'] === true ||
@@ -208,15 +210,15 @@ async function startSession(opts = {}) {
     console.log('[mox] store kept (--keep-state)');
   }
 
-  // --rules wins: selective allowlist. Ignore all-passthrough / conflicting --traffic=.
+  // --rules / sticky packs: selective allowlist. Ignore all-passthrough / conflicting --traffic=.
   if (ruleKeywords.length && opts.traffic && opts.traffic !== 'selective') {
     if (opts.traffic === 'all-passthrough') {
       console.log(
-        '[mox] ignoring all-passthrough traffic mode; --rules keeps selective',
+        '[mox] ignoring all-passthrough traffic mode; rules keep selective',
       );
     } else {
       throw new Error(
-        '--rules forces selective traffic; do not pass conflicting --traffic=',
+        'rules force selective traffic; do not pass conflicting --traffic=',
       );
     }
   }
@@ -243,7 +245,21 @@ async function startSession(opts = {}) {
   saveSession({ activeCatalogs: catalogs });
 
   if (ruleKeywords.length) {
-    applyRulesToSession(ruleKeywords, { rulesDir: opts.rulesDir });
+    if (rulesSource === 'rules-active') {
+      console.log(
+        `[mox] applying sticky rules-active: ${ruleKeywords.join(', ')}`,
+      );
+    }
+    const { merged: appliedRules, applied } = applyRulesToSession(
+      ruleKeywords,
+      { rulesDir: opts.rulesDir },
+    );
+    if (applied && appliedRules.resolved.length) {
+      saveRulesActive(appliedRules.resolved);
+      if (rulesSource === 'cli') {
+        console.log('[mox] sticky packs → .data/rules-active');
+      }
+    }
     // Remount after map upsert: pick up new services + refresh rules seed.
     if (!names.length) {
       catalogs = resolveActiveCatalogs({ allIfEmpty: true });

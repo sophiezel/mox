@@ -91,14 +91,17 @@ Playwright 样板：[`examples/playwright-mox/`](./examples/playwright-mox/)。
 
 ```bash
 # rules/*.json stub 包，或同名 *.txt Whistle-like map（单列 host/path 即可；同名优先 .json）
+mox rules use csp-trade      # 写入 .data/rules-active（本地 sticky）
+mox start                    # 之后无需每次 --rules=
 mox start --name=tower --rules=csp-trade
 mox start --rules=csp-trade,csp-tasks   # 逗号/空格多值 merge；找不到的名字跳过
 mox start --name=tower --rules jian-h5 xrk
 # 同时 --capture-open：仍以 rules 为准（selective）；未命中可落盘
 mox start --name=tower --rules jian-h5 --capture-open
-mox rules use jian-h5 xrk    # 运行中热切换
+mox rules use jian-h5 xrk    # 运行中热切换 + 更新 sticky
 mox rules list
 mox rules save my-pack       # 从当前 session 导出 .json
+mox rules clear              # 清 sticky；session 回 all-mock
 # 任意路径的 map 文件也可一次性导入：
 mox map import ./whistle-map.txt
 ```

@@ -96,6 +96,7 @@ Shape 通道（有界静态推断，见 [`references/infer-from-usage.md`](../re
 ```
 rules/                         共享 rule 包（可 git；stub 级标签）
 .data/
+  rules-active                 本地 sticky pack 名（一行一个；不进 git）
   session.json                 全局运行时：端口 / trafficMode / allowlist / cases / activeCatalogs
   runtime.json                 当前进程状态
   service-journal.json         Virtual Service 命中日志（跨进程 stop 摘要）
@@ -117,6 +118,7 @@ rules/                         共享 rule 包（可 git；stub 级标签）
     domain-draft.md            init/generate 静默草稿（高级可重跑）
 ```
 
+- Pack 定义在 `rules/`；**启用哪些 pack** 在 `.data/rules-active`（意图）；`session` 的 `trafficMode`/`mockAllowlist`/`activeRules` 是 apply 后的运行快照。
 - **一个** proxy + mock 进程；`start --name=<upstreamId…>` 挂载指定 services；省略 = 全部。
 - 同一 `upstreamId` 被多次 init（不同前端目录）发现时 **共享** `.data/services/<upstreamId>/`。
 - stubId 跨不同服务冲突 → 启动失败（不静默覆盖）。

@@ -26,7 +26,7 @@
 | **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
 | **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
 | 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
-| Rules | 包根 `rules/*.json` stub 包或 `*.txt` Whistle map（或 `--rules-dir` / `MOX_RULES_DIR`）；`--rules=a,b` / 空格多值 **merge**，找不到的名字**跳过**；同名优先 `.json` |
+| Rules | 包根 `rules/*.json` stub 包或 `*.txt` Whistle map（或 `--rules-dir` / `MOX_RULES_DIR`）；`--rules=a,b` / 空格多值 **merge**，找不到的名字**跳过**；同名优先 `.json`；**启用偏好**本地 `.data/rules-active`（一行一包名，`#` 整行注释；`rules use` / `start --rules` 写入；plain `start` 重 apply；`rules clear` 清空） |
 | Map | `mox map import` / `--rules` `.txt`：Whistle **pattern 子集**（`https://host/path` \| `host/path` \| `host`；可选第二列 `/path` 或 `http(s)://…` 仅标记本地 mock）；单列合法；**拒绝**纯 `/path`；协议不参与运行时匹配；path 前缀 `/` 边界 |
 | `proxy.mode` | `mock-lab`（默认）\| `capture-open`；CLI `--capture-open`（已弃用 `--record` / `record-first` / `mox record`） |
 | 提测 | `mox quality-gate` exit 0 = 可提测（Z1）；可选 `--require-mitm-check=`（H1：须系统代理 WebView） |
@@ -108,7 +108,7 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 | LAN 安全 | 默认 `allowOpenProxy=true`；公共 Wi‑Fi 勿用；收紧用 `--no-open-proxy` |
 | mock 命中 | `.data/services/<upstreamId>/mocks/<METHOD>/<path>/index.js` |
 | miss | soft：透传 + capture 写入 `services/<up>/captures/`，不因单接口拖垮 session |
-| Rules 热更新 | proxy **rulesLoader**（≤1s）= `mergeCatalogs(activeCatalogs)`，与 trafficLoader 同型；禁止仅依赖启动时 rules 快照。`start --rules` 先 applyRules 再 rematch/remount |
+| Rules 热更新 | proxy **rulesLoader**（≤1s）= `mergeCatalogs(activeCatalogs)`，与 trafficLoader 同型；禁止仅依赖启动时 rules 快照。`start --rules` / sticky `.data/rules-active` 先 applyRules 再 rematch/remount；`mox traffic` 只改 session 不改 preference（下次 start 有 sticky 会重 apply 覆盖） |
 | CORS | **默认 `reflectOrigin: true`**：本地 proxy/mock 回显请求 Origin（任意 H5 域，不硬编码业务域名）；`reflectOrigin: false` 退回 localhost + `extraOrigins` 白名单。OPTIONS → 204。不使用 `*`（credentials 需具体 Origin） |
 | HTTPS | 默认 MITM（catalog hosts）；根 CA 在 `~/.mox/certs/`（可从项目 `.data/mitm` 迁移复制）；叶子按根指纹分桶；首次 `mox start` 写入 System.keychain；真机 `/mox/ca.cer` + `/__mox_mitm_check` 自证；Cronet UA 跳过 MITM；`--mitm=0` 关闭；Chrome 无 ignore-certificate 旗标 |
 | E2E scenario 隔离 | 一 worker 一 session，或用例 `beforeEach`/`afterEach` `set-scenario` 复位；不建分布式锁 |
