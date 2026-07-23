@@ -40,9 +40,10 @@ mox init
 
 ```bash
 mox start
-# 默认：MITM 开、按配置打开 browser.startUrl（默认 http://127.0.0.1:8000）
+# 默认：MITM 开；不自动弹 Chrome（需要：mox start --open 或 mox open）
+# startUrl 默认 http://127.0.0.1:8000；换页：--start-url=
 # 关闭 MITM：mox start --mitm=0
-# 换打开页：mox start --start-url=http://127.0.0.1:8080
+# 清理 ephemeral .data：mox gc [--dry-run]
 ```
 
 预期日志含：
