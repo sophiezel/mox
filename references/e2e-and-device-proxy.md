@@ -7,10 +7,11 @@
 可复制样板：[`examples/playwright-mox/`](../examples/playwright-mox/)（config + `set-scenario` + `quality-gate`）。
 
 ```bash
-mox start --no-auto-launch
+mox start
 mox set-scenario e2e-happy
 mox quality-gate
-# 默认打开 http://127.0.0.1:8000；换页用 --start-url=
+# 默认不弹 Chrome；需要时：mox start --open 或 mox open
+# 换页用 --start-url=
 ```
 
 Playwright 配置指向本 CLI proxy：
@@ -48,7 +49,7 @@ mox quality-gate --require-mitm-check=https://<catalog-host>/__mox_mitm_check
 | Firefox | `network.proxy.no_proxies_on` = `localhost, 127.0.0.1, ::1`；或系统代理「忽略主机」 |
 | Safari | 系统设置 → 网络 → 详细信息 → 代理 → Bypass |
 | 系统代理 | 忽略列表含 `localhost,127.0.0.1,::1` |
-| `--no-auto-launch` | 启动日志有同一 tip；自行按上表配置 |
+| 默认不弹窗 / `mox open` | 启动日志有同一 tip；自行按上表配置；需要专用 Chrome：`mox start --open` 或 `mox open` |
 
 原则：本地开发服 **直连**；远端 API **走 mox proxy**。
 

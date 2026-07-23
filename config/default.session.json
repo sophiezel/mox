@@ -24,10 +24,26 @@
     "port": 3900
   },
   "browser": {
-    "autoLaunch": true,
+    "autoLaunch": false,
     "startUrl": "http://127.0.0.1:8000",
     "proxyArg": true,
     "trafficGateSeconds": 30
+  },
+  "dataRetention": {
+    "captures": { "maxFiles": 500, "maxAgeDays": 7 },
+    "appendLogs": {
+      "maxBytes": 20971520,
+      "keepRotated": 3,
+      "targets": [
+        "audit/proxy-access.jsonl",
+        "audit/changelog.jsonl",
+        "reports/upstream-failures.jsonl",
+        "session-start.log"
+      ]
+    },
+    "reports": { "maxAgeDays": 14, "keepPerPrefix": 20 },
+    "chromeProfiles": { "maxAgeDays": 14 },
+    "orphanServiceDirs": true
   },
   "cors": {
     "allowLocalhost": true,

@@ -87,6 +87,14 @@ test('parseArgs accumulates --name and --rules', () => {
     '--rules=csp-trade,csp-tasks',
   ]);
   assert.deepEqual(comma.flags.rules, ['csp-trade', 'csp-tasks']);
+
+  const logFlag = parseArgs([
+    'node',
+    'mox',
+    'start',
+    '--proxy-log=verbose',
+  ]);
+  assert.equal(logFlag.flags['proxy-log'], 'verbose');
 });
 
 test('global session save/load ignores project path', () => {

@@ -96,7 +96,7 @@ Shape 通道（有界静态推断，见 [`references/infer-from-usage.md`](../re
 ```
 rules/                         共享 rule 包（可 git；stub 级标签）
 .data/
-  rules-active                 本地 sticky pack 名（一行一个；不进 git）
+  rules-active                 本地 sticky pack 名（≈ Whistle selectedList；一行一个；不进 git）
   session.json                 全局运行时：端口 / trafficMode / allowlist / cases / activeCatalogs
   runtime.json                 当前进程状态
   service-journal.json         Virtual Service 命中日志（跨进程 stop 摘要）
@@ -107,18 +107,20 @@ rules/                         共享 rule 包（可 git；stub 级标签）
   exports/                     export-msw 等
   mitm/                        遗留项目级 CA 目录（启动时若存在可迁移复制到 ~/.mox/certs）
   # 默认根证书：~/.mox/certs/root.{key,crt}
-  chrome-profiles/<label>/     仅 autoLaunch Chrome 时创建
+  chrome-profiles/<label>/     仅 `mox start --open` / `mox open` 时创建
   services/<upstreamId>/       Service Catalog（唯一真源）
     mocks/<METHOD>/<path>/index.js
     contracts/
-    captures/
+    captures/                  ephemeral；受 dataRetention 约束
     proxy-rules.json
     upstreams.json
     models.json                虚拟实体（可选）
     domain-draft.md            init/generate 静默草稿（高级可重跑）
 ```
 
-- Pack 定义在 `rules/`；**启用哪些 pack** 在 `.data/rules-active`（意图）；`session` 的 `trafficMode`/`mockAllowlist`/`activeRules` 是 apply 后的运行快照。
+**真源 vs ephemeral**：`mocks` / `contracts` / `proxy-rules` / `upstreams` / `models` 为 catalog 真源，GC **不删**。`captures/`、`audit/*.jsonl`、`reports/` 时间戳产物、`chrome-profiles/`、无 `proxy-rules.json` 的空 service 壳为可回收；策略在 `session.dataRetention`（见 `config/default.session.json`）。`mox start` quiet GC；`recordCapture` / access append 热路径；显式 `mox gc [--dry-run]`。
+
+- Pack 定义在 `rules/`；**启用哪些 pack** 在 `.data/rules-active`（意图 ≈ selectedList）；`session` 的 `trafficMode`/`mockAllowlist`/`activeRules` 是派生快照；空 preference 时 start 清残留 pack 门闸。
 - **一个** proxy + mock 进程；`start --name=<upstreamId…>` 挂载指定 services；省略 = 全部。
 - 同一 `upstreamId` 被多次 init（不同前端目录）发现时 **共享** `.data/services/<upstreamId>/`。
 - stubId 跨不同服务冲突 → 启动失败（不静默覆盖）。
@@ -126,3 +128,4 @@ rules/                         共享 rule 包（可 git；stub 级标签）
 - 单测默认写入临时 `MOX_DATA_ROOT`，不污染本仓 `.data`。
 - 读 contracts/handlers：**统一** `lib/catalog-merge`；禁止各脚本假设已废除的 `projects/*`。
 - 后台 session：`mox start --detach`（子进程保活）；前台默认忽略 SIGHUP，用 `stop` / SIGTERM 结束。
+- 浏览器默认不 launch；`mox start --open` 或已运行时 `mox open`。

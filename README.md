@@ -76,11 +76,12 @@ mox start --name=tower --name=other
 - 纯全透传：`mox traffic all-passthrough`（已移除旧的 `mox record` / `--record`）。
 
 ```bash
-mox start --name=demo --no-auto-launch
+mox start --name=demo
 mox scenario e2e-happy
 mox quality-gate
 # Hybrid 可见性（H1）：App 须走系统 Wi‑Fi 代理
 # mox quality-gate --require-mitm-check=https://<catalog-host>/__mox_mitm_check
+# 需要代理 Chrome：mox start --open 或会话已起时 mox open
 ```
 
 Playwright 样板：[`examples/playwright-mox/`](./examples/playwright-mox/)。
@@ -101,7 +102,7 @@ mox start --name=tower --rules jian-h5 --capture-open
 mox rules use jian-h5 xrk    # 运行中热切换 + 更新 sticky
 mox rules list
 mox rules save my-pack       # 从当前 session 导出 .json
-mox rules clear              # 清 sticky；session 回 all-mock
+mox rules clear              # 清 sticky；pack 门闸 → selective + 空 allowlist
 # 任意路径的 map 文件也可一次性导入：
 mox map import ./whistle-map.txt
 ```
@@ -119,7 +120,7 @@ Scenario 可声明 `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quali
 **CI 冒烟**：
 
 ```bash
-mox start --name=demo --no-auto-launch
+mox start --name=demo
 mox scenario e2e-happy
 mox smoke --ci
 mox quality-gate
@@ -187,7 +188,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 旧名仍可用：`session start|stop`、`set-scenario`、`capture-merge` 等。
 
 `init` / `generate` 常用 flag：`--force` 清孤儿文件（默认不擦已录数据）；`--overwrite-capture` 才允许用法推断盖掉已录真值；`--strict-usage` 在追踪结果为空时失败。  
-`start` 常用 flag：`--rules=a,b`、`--capture-open`、`--keep-state`、`--mitm=0`、`--proxy-host=127.0.0.1`、`--no-open-proxy`。
+`start` 常用 flag：`--rules=a,b`、`--capture-open`、`--proxy-log=verbose|silent`、`--keep-state`、`--mitm=0`、`--proxy-host=127.0.0.1`、`--no-open-proxy`。
 
 ## 文档
 

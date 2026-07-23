@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadSession, saveSession } = require('../lib/session-config');
+const { loadSession } = require('../lib/session-config');
 const { appendAudit } = require('../lib/audit');
 const {
   listRuleNames,
@@ -13,6 +13,7 @@ const {
   loadRulesActive,
   saveRulesActive,
   clearRulesActive,
+  clearPackGateFromSession,
 } = require('../lib/rules-active');
 
 /**
@@ -93,21 +94,15 @@ function runRules(opts = {}) {
 
   if (action === 'clear') {
     clearRulesActive();
-    const prev = loadSession();
-    const cfg = saveSession({
-      activeRules: [],
-      proxy: {
-        ...(prev.proxy || {}),
-        trafficMode: 'all-mock',
-        mockAllowlist: [],
-      },
-    });
+    const cfg = clearPackGateFromSession();
     const primary = cfg.activeCatalogs?.[0] || 'default';
     appendAudit(primary, {
       command: 'rules clear',
-      summary: 'rules-active cleared; trafficMode=all-mock',
+      summary: 'rules-active cleared; pack gate selective allowlist=0',
     });
-    console.log('[mox] rules-active cleared; trafficMode=all-mock allowlist=0');
+    console.log(
+      '[mox] rules-active cleared; pack gate selective allowlist=0',
+    );
     return { preference: [], session: cfg };
   }
 

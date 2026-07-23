@@ -5,7 +5,7 @@
 ## 1. 启动 mock 代理
 
 ```bash
-mox start --no-auto-launch
+mox start
 # 默认 proxy http://127.0.0.1:18999
 mox set-scenario e2e-happy
 mox quality-gate   # exit 0 才提测（零溢出口径）

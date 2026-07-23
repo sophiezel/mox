@@ -60,6 +60,7 @@ test('capture-open MITMs host on captureMitmHosts without path rule', async () =
     };
 
     const capturesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-rmh-cap-'));
+    const accessLogPath = path.join(capturesDir, 'proxy-access.jsonl');
     const logs = [];
     const origLog = console.log;
     console.log = (...a) => {
@@ -79,6 +80,7 @@ test('capture-open MITMs host on captureMitmHosts without path rule', async () =
       captureScope: 'catalog',
       recordMisses: true,
       capturesDir,
+      accessLogPath,
       rejectUnauthorized: false,
       mitm: {
         enabled: true,
@@ -110,9 +112,14 @@ test('capture-open MITMs host on captureMitmHosts without path rule', async () =
         setTimeout(() => reject(new Error('CONNECT timeout')), 5000);
       });
 
+      // summary console hides successful connect; full action stays in jsonl
+      await new Promise((r) => setTimeout(r, 50));
+      const access = fs.existsSync(accessLogPath)
+        ? fs.readFileSync(accessLogPath, 'utf8')
+        : '';
       assert.ok(
-        logs.some((l) => /connect-mitm/.test(l)),
-        `expected connect-mitm in logs: ${logs.filter((l) => /connect/.test(l)).join(' | ')}`,
+        /"action":"connect-mitm"/.test(access),
+        `expected connect-mitm in access log: ${access.slice(0, 400)}`,
       );
 
       const tlsSock = tls.connect({

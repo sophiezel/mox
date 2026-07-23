@@ -13,7 +13,7 @@
 ### 1. 场景切换
 
 ```bash
-mox start --name=demo --no-auto-launch
+mox start --name=demo
 # 另开终端：
 mox scenario e2e-fault --name=demo
 mox smoke --ci --name=demo

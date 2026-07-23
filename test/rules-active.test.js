@@ -10,6 +10,8 @@ const {
   loadRulesActive,
   saveRulesActive,
   clearRulesActive,
+  clearPackGateFromSession,
+  syncEmptyPackPreferenceToSession,
   resolveStartRuleKeywords,
   rulesActivePath,
 } = require('../lib/rules-active');
@@ -120,11 +122,58 @@ test('rules use writes sticky; clear resets session + preference', () => {
 
       runRules({ action: 'clear' });
       assert.deepEqual(loadRulesActive(), []);
-      assert.equal(loadSession().proxy.trafficMode, 'all-mock');
+      assert.equal(loadSession().proxy.trafficMode, 'selective');
       assert.deepEqual(loadSession().proxy.mockAllowlist, []);
       assert.deepEqual(loadSession().activeRules, []);
     } finally {
       fs.rmSync(rulesDir, { recursive: true, force: true });
     }
+  });
+});
+
+test('syncEmptyPackPreferenceToSession clears stale pack gate', () => {
+  withDataRoot(() => {
+    saveSession({
+      activeRules: ['csp-trade'],
+      proxy: {
+        trafficMode: 'selective',
+        mockAllowlist: [
+          'GET jian-j/csp-task/external/trade/appoint/getTradeAppointDetail',
+        ],
+      },
+    });
+    clearRulesActive();
+    const sync = syncEmptyPackPreferenceToSession();
+    assert.equal(sync.cleared, true);
+    assert.deepEqual(loadSession().activeRules, []);
+    assert.deepEqual(loadSession().proxy.mockAllowlist, []);
+    assert.equal(loadSession().proxy.trafficMode, 'selective');
+  });
+});
+
+test('syncEmptyPackPreferenceToSession leaves virgin session alone', () => {
+  withDataRoot(() => {
+    saveSession({
+      activeRules: [],
+      proxy: { trafficMode: 'all-mock', mockAllowlist: [] },
+    });
+    const before = loadSession();
+    const sync = syncEmptyPackPreferenceToSession();
+    assert.equal(sync.cleared, false);
+    assert.equal(loadSession().proxy.trafficMode, before.proxy.trafficMode);
+    assert.deepEqual(loadSession().activeRules, []);
+  });
+});
+
+test('clearPackGateFromSession sets selective empty allowlist', () => {
+  withDataRoot(() => {
+    saveSession({
+      activeRules: ['x'],
+      proxy: { trafficMode: 'all-mock', mockAllowlist: ['GET a/b'] },
+    });
+    clearPackGateFromSession();
+    assert.deepEqual(loadSession().activeRules, []);
+    assert.deepEqual(loadSession().proxy.mockAllowlist, []);
+    assert.equal(loadSession().proxy.trafficMode, 'selective');
   });
 });

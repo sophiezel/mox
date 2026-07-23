@@ -16,6 +16,7 @@ const {
 } = require('../scripts/stop-session');
 const { ensureDataDirs } = require('../lib/paths');
 const { capturesDirFor } = require('../lib/catalog-merge');
+const { serviceDataDir } = require('../lib/paths');
 const { setScenario } = require('../scripts/set-scenario');
 const { copyBuiltinScenarios } = require('../lib/scenario');
 
@@ -160,7 +161,7 @@ test('intent: stop hints merge when captures exist', () => {
     assert.equal(out.killed, false);
     assert.equal(out.captureCount, 1);
     try {
-      fs.rmSync(capDir, { recursive: true, force: true });
+      fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
     } catch (_) {
       /* ignore */
     }
@@ -177,6 +178,7 @@ test('intent: stop --auto-merge invokes capture-merge', () => {
       JSON.stringify({
         method: 'GET',
         url: 'https://example.com/x',
+
         status: 200,
         body: { code: 0, data: { a: 1 } },
       }),
@@ -188,7 +190,7 @@ test('intent: stop --auto-merge invokes capture-merge', () => {
       : out.mergeResult;
     assert.equal(typeof first.merged, 'number');
     try {
-      fs.rmSync(capDir, { recursive: true, force: true });
+      fs.rmSync(serviceDataDir(up), { recursive: true, force: true });
     } catch (_) {
       /* ignore */
     }

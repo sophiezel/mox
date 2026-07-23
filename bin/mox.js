@@ -69,8 +69,10 @@ mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
   mox init [scanDir] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mox start [--name=serviceId…] [--rules kw…] [--start-url=URL] [--scan-dir=DIR] [--scenario=NAME] [--proxy-host=HOST] [--mitm=0] [--keep-state] [--detach]
+  mox start [--name=serviceId…] [--rules kw…] [--open] [--start-url=URL] [--scan-dir=DIR] [--scenario=NAME] [--proxy-host=HOST] [--proxy-log=summary|verbose|silent] [--mitm=0] [--keep-state] [--detach]
+  mox open [--start-url=URL]
   mox stop [--auto-merge]
+  mox gc [--dry-run]
   mox rules list|use <kw…>|save <name>|clear [--rules-dir=DIR]
   mox scenario <name>
   mox smoke [--name=serviceId…] [--ci] [--cases=...] [--scenario=NAME]
@@ -114,9 +116,12 @@ Flags:
   --rules a,b / kw…    selective mock from rules/*.json or Whistle *.txt; comma/space multi merge; missing names skipped; writes .data/rules-active; plain start reuses it; with --capture-open still selective + capture-open
   --rules-dir=DIR      override rules directory (default: <pkg>/rules)
   --capture-open       proxy.mode=capture-open (widen MITM capture); pure all-passthrough: mox traffic all-passthrough
+  --open               with start: launch proxy Chrome (default: do not); or use mox open on a running session
+  --proxy-log=LEVEL    console access: summary (default, mock+fail) | verbose | silent; overrides MOX_PROXY_LOG
   --auto-merge         with stop: run capture-merge after stop
   --keep-state         with start: do not reset Virtual Service store / journal
   --detach             with start: spawn background session (survives shell exit); stop via mox stop
+  --dry-run            with gc: report what would be removed without deleting
 `;
 
   const footer = `
@@ -207,15 +212,11 @@ async function runSessionStart(f) {
     const childArgs = process.argv.slice(2).filter((a) => {
       if (a === '--detach') return false;
       if (a.startsWith('--detach=')) return false;
+      // Detached sessions never auto-launch Chrome.
+      if (a === '--open') return false;
+      if (a.startsWith('--open=')) return false;
       return true;
     });
-    // Detached sessions never auto-launch Chrome (no TTY / no GUI assumption).
-    if (
-      !childArgs.includes('--no-auto-launch') &&
-      !childArgs.some((a) => a.startsWith('--no-auto-launch='))
-    ) {
-      childArgs.push('--no-auto-launch');
-    }
     const logPath = path.join(getDataRoot(), 'session-start.log');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const outFd = fs.openSync(logPath, 'a');
@@ -279,7 +280,7 @@ async function runSessionStart(f) {
     proxy: f.proxy,
     startUrl: f['start-url'],
     scanDir: f['scan-dir'] || undefined,
-    autoLaunch: f['no-auto-launch'] ? false : undefined,
+    open: Boolean(f.open),
     scenario: f.scenario,
     allowOpenProxy: f['no-open-proxy']
       ? false
@@ -295,6 +296,7 @@ async function runSessionStart(f) {
           : undefined,
     recordMockHits: Boolean(f['record-mock-hits']),
     captureOpen: Boolean(f['capture-open']),
+    proxyLog: f['proxy-log'],
     traffic,
     keepState: Boolean(f['keep-state']),
   });
@@ -449,6 +451,24 @@ async function main() {
   // Intent aliases (primary track)
   if (cmd === 'start') {
     await runSessionStart(f);
+    return;
+  }
+  if (cmd === 'open') {
+    const { openProxyBrowser } = require('../scripts/start-session');
+    try {
+      const launched = openProxyBrowser({ startUrl: f['start-url'] });
+      console.log(
+        `[mox] launched Chrome pid=${launched.chromePid} → ${launched.startUrl}`,
+      );
+    } catch (e) {
+      console.error(`[mox] ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+  if (cmd === 'gc') {
+    const { runGcCli } = require('../scripts/gc-cli');
+    runGcCli({ dryRun: Boolean(f['dry-run']) });
     return;
   }
   if (cmd === 'stop') {

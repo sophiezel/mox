@@ -36,12 +36,30 @@ test('buildChromiumLaunchArgs has bypass list and never ignore-certificate flags
   assert.ok(!args.some((a) => a.includes('ignore-certificate')));
 });
 
-test('defaults: mitm on, LAN bind, open proxy, startUrl localhost:8000', () => {
+test('defaults: mitm on, LAN bind, open proxy, startUrl localhost:8000, autoLaunch off', () => {
   const defaults = loadDefault();
   assert.equal(defaults.proxy.mitm?.enabled, true);
   assert.equal(defaults.proxy.host, '0.0.0.0');
   assert.equal(defaults.proxy.allowOpenProxy, true);
   assert.equal(defaults.browser.startUrl, 'http://127.0.0.1:8000');
+  assert.equal(defaults.browser.autoLaunch, false);
+  assert.equal(defaults.dataRetention?.captures?.maxFiles, 500);
+});
+
+test('applySessionOpts forces autoLaunch false unless open', () => {
+  const { applySessionOpts } = require('../scripts/start-session');
+  const base = {
+    mock: { host: '127.0.0.1', port: 3900 },
+    proxy: { enabled: true, host: '127.0.0.1', port: 18999, mitm: { enabled: true } },
+    browser: { autoLaunch: true, startUrl: 'http://127.0.0.1:8000' },
+    cors: {},
+    cases: { default: 'success', active: {} },
+  };
+  const closed = applySessionOpts(base, { mockPort: 4400 });
+  assert.equal(base.browser.autoLaunch, true);
+  assert.equal(closed.browser.autoLaunch, false);
+  const opened = applySessionOpts(base, { open: true });
+  assert.equal(opened.browser.autoLaunch, true);
 });
 
 test('session config: proxy.host=0.0.0.0 is parseable from defaults merge', () => {

@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+### Breaking
+- **`mox start` 默认不再自动打开浏览器**；需要时用 `mox start --open` 或已运行会话上的 `mox open`。已移除 `--no-auto-launch`。
+- **`.data` 自动生命周期**：`session.dataRetention` 约束 captures / append 日志 / reports / chrome-profiles / 无 `proxy-rules` 的空 service 壳；`mox start` quiet GC；显式 `mox gc [--dry-run]`。不删 catalog 真源。
+
+### Changed
+- Proxy 控制台 access：默认 `summary`（mock+fail）；详细 `action` 仍全量写入 `proxy-access.jsonl`（附 `label`/`bucket`）。`mox start --proxy-log=verbose|silent`（优先于 `MOX_PROXY_LOG`）。
+
 ### Added
-- Sticky rule packs：本地 `.data/rules-active`（一行一包名，`#` 注释）；`mox rules use` / `start --rules` 写入；plain `mox start` 自动重 apply；`mox rules clear` 清空并回 `all-mock`。
+- Sticky rule packs：本地 `.data/rules-active`（≈ Whistle `selectedList`；一行一包名，`#` 注释）；`mox rules use` / `start --rules` 写入；plain `mox start` 重 apply；空 preference 且残留 `activeRules` → 清 pack 门闸（`selective`+空 allowlist）；`mox rules clear` 同。
+- `lib/data-retention.js` 通用防膨胀原语 + `mox gc`；浏览器 opt-in（`--open` / `mox open`）。
 - `mox device prepare`：ADB 设 `http_proxy`、push CA、打印 App WebView `__mox_mitm_check`（不输 PIN；H1）。
 - `quality-gate --require-mitm-check=<url>`：Hybrid 可见性探针。
 - Scenario `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quality-gate` 失败。

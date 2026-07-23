@@ -7,7 +7,7 @@ const path = require('path');
 const net = require('net');
 const tls = require('tls');
 const { applyCorsHeaders, handleOptions } = require('../../lib/cors');
-  const {
+const {
   matchRule,
   matchPassthroughHost,
   hostCoveredByRules,
@@ -26,7 +26,18 @@ const {
   normalizeCaptureScope,
   normalizeProxyMode,
 } = require('../../lib/capture-filter');
+const {
+  pruneCapturesDir,
+  rotateAppendLog,
+  resolveRetentionPolicy,
+} = require('../../lib/data-retention');
 const { appendUpstreamFailure } = require('../../lib/upstream-failure-journal');
+const {
+  enrichAccessEntry,
+  formatConsoleLine,
+  shouldPrintConsole,
+  resolveProxyLogLevel,
+} = require('../../lib/proxy-access-log');
 
 const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024; // 10mb
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000;
@@ -134,6 +145,10 @@ function startProxyServer(opts) {
     trafficLoader = null,
     /** optional () => rules[] from mergeCatalogs (hot-reload like trafficLoader) */
     rulesLoader = null,
+    /** console access level: summary | verbose | silent (CLI --proxy-log / MOX_PROXY_LOG) */
+    proxyLogLevel = undefined,
+    /** session.dataRetention — captures prune + access log rotate */
+    dataRetention = null,
     /**
      * Device hub / PAC public base: { lanIp, port }
      * When missing, derive from request Host header.
@@ -240,18 +255,36 @@ function startProxyServer(opts) {
   }
 
   const mockUrl = new URL(mockTarget);
+  const accessLogLevel = resolveProxyLogLevel(proxyLogLevel);
+  const retention = resolveRetentionPolicy(dataRetention);
+  let accessAppendCount = 0;
 
   function logAccess(entry) {
+    const enriched = enrichAccessEntry(entry);
     const line = JSON.stringify({
       at: new Date().toISOString(),
       taskId,
-      ...entry,
+      ...enriched,
     });
     if (accessLogPath) {
       fs.mkdirSync(path.dirname(accessLogPath), { recursive: true });
-      fs.appendFile(accessLogPath, `${line}\n`, () => {});
+      fs.appendFile(accessLogPath, `${line}\n`, () => {
+        accessAppendCount += 1;
+        if (accessAppendCount % 32 === 0) {
+          try {
+            rotateAppendLog(accessLogPath, {
+              maxBytes: retention.appendLogs.maxBytes,
+              keepRotated: retention.appendLogs.keepRotated,
+            });
+          } catch {
+            /* ignore rotate errors on hot path */
+          }
+        }
+      });
     }
-    console.log(`[proxy] ${entry.action} ${entry.method} ${entry.url}`);
+    if (shouldPrintConsole(enriched, accessLogLevel)) {
+      console.log(formatConsoleLine(enriched));
+    }
   }
 
   const resolvedCaptureScope = normalizeCaptureScope(captureScope);
@@ -282,11 +315,14 @@ function startProxyServer(opts) {
     const name = `${Date.now()}-${(rec.host || 'h').replace(/\W/g, '_')}-${rec.path
       .replace(/\W/g, '_')
       .slice(0, 80)}.json`;
-    fs.writeFile(
-      path.join(dir, name),
-      `${JSON.stringify(rec, null, 2)}\n`,
-      () => {},
-    );
+    const file = path.join(dir, name);
+    fs.writeFile(file, `${JSON.stringify(rec, null, 2)}\n`, () => {
+      try {
+        pruneCapturesDir(dir, retention.captures);
+      } catch {
+        /* ignore prune errors on hot path */
+      }
+    });
   }
 
   function isPassthroughHost(hostname, port = null) {

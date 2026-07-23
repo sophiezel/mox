@@ -30,6 +30,7 @@ const { applyRulesToSession } = require('../lib/rules');
 const {
   resolveStartRuleKeywords,
   saveRulesActive,
+  syncEmptyPackPreferenceToSession,
 } = require('../lib/rules-active');
 const { startMockServer } = require('../runtime/mock-server/server');
 const { startProxyServer } = require('../runtime/proxy/server');
@@ -118,6 +119,80 @@ function resolveClientProxyHost(bindHost) {
   return bindHost;
 }
 
+/**
+ * Launch (or preview) a Chromium-family browser pointed at the mox proxy.
+ * @param {{ profileLabel: string, proxyHost: string, proxyPort: number, startUrl?: string, dryRun?: boolean }} opts
+ * @returns {{ chromePid: number|null, chromeCmd: string, chrome: string|null, startUrl: string }}
+ */
+function launchProxyBrowser(opts) {
+  const profileLabel = opts.profileLabel || 'default';
+  const proxyHost = opts.proxyHost || '127.0.0.1';
+  const proxyPort = Number(opts.proxyPort) || 18999;
+  const startUrl = opts.startUrl || 'http://127.0.0.1:8000';
+  const userDataDir = chromeProfileDir(profileLabel);
+  const chrome = findChrome();
+  const clientProxyHost = resolveClientProxyHost(proxyHost);
+  const proxyServerArg = `${clientProxyHost}:${proxyPort}`;
+  const launchArgs = buildChromiumLaunchArgs({
+    userDataDir,
+    proxyServerArg,
+    clientProxyHost,
+    proxyPort,
+    startUrl,
+  });
+  const chromeCmd = chrome
+    ? `"${chrome}" ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`
+    : `(find Chromium/Chrome/Edge) ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+
+  if (opts.dryRun) {
+    return { chromePid: null, chromeCmd, chrome, startUrl };
+  }
+  if (!chrome || (chrome.startsWith('/') && !fs.existsSync(chrome))) {
+    return { chromePid: null, chromeCmd, chrome, startUrl };
+  }
+  ensureChromeProfileDir(profileLabel);
+  scrubChromeSessionRestore(userDataDir);
+  const child = spawn(chrome, launchArgs, { detached: true, stdio: 'ignore' });
+  child.unref();
+  return { chromePid: child.pid, chromeCmd, chrome, startUrl };
+}
+
+/**
+ * Open proxy browser against an already-running session.
+ * @param {{ startUrl?: string }} [opts]
+ */
+function openProxyBrowser(opts = {}) {
+  const cfg = loadSession();
+  let runtime = {};
+  try {
+    if (fs.existsSync(getGlobalRuntimePath())) {
+      runtime = JSON.parse(fs.readFileSync(getGlobalRuntimePath(), 'utf8'));
+    }
+  } catch {
+    runtime = {};
+  }
+  if (!runtime?.proxy?.enabled || !runtime.proxy.port) {
+    throw new Error('no running proxy session — start with: mox start');
+  }
+  const primary =
+    (Array.isArray(runtime.activeCatalogs) && runtime.activeCatalogs[0]) ||
+    runtime.projectSlug ||
+    (Array.isArray(cfg.activeCatalogs) && cfg.activeCatalogs[0]) ||
+    'default';
+  const startUrl =
+    opts.startUrl || cfg.browser?.startUrl || 'http://127.0.0.1:8000';
+  const launched = launchProxyBrowser({
+    profileLabel: primary,
+    proxyHost: runtime.proxy.host || cfg.proxy?.host || '127.0.0.1',
+    proxyPort: runtime.proxy.port,
+    startUrl,
+  });
+  if (!launched.chromePid) {
+    throw new Error('Chrome/Chromium/Edge not found');
+  }
+  return launched;
+}
+
 /** Apply CLI overrides without mutating the loaded session object. */
 function applySessionOpts(base, opts = {}) {
   const patch = {};
@@ -139,7 +214,10 @@ function applySessionOpts(base, opts = {}) {
   if (opts.startUrl) {
     patch.browser = { ...(patch.browser || {}), startUrl: opts.startUrl };
   }
-  if (opts.autoLaunch === false) {
+  // Browser is opt-in via --open only; ignore stale session autoLaunch:true.
+  if (opts.open === true || opts.autoLaunch === true) {
+    patch.browser = { ...(patch.browser || {}), autoLaunch: true };
+  } else {
     patch.browser = { ...(patch.browser || {}), autoLaunch: false };
   }
   if (
@@ -227,9 +305,23 @@ async function startSession(opts = {}) {
     names: names.length ? names : undefined,
     allIfEmpty: true,
   });
-  const { ensureServiceDirs, ensureDataDirs, auditDir, parseStubId, serviceDataDir } =
+  const { ensureServiceDirs, ensureDataDirs, auditDir, parseStubId, serviceDataDir, getDataRoot } =
     require('../lib/paths');
   ensureDataDirs();
+  {
+    const {
+      runDataRetention,
+      resolveRetentionPolicy,
+    } = require('../lib/data-retention');
+    const cfgEarly = loadSession();
+    const retentionPolicy = resolveRetentionPolicy(cfgEarly.dataRetention);
+    const gc = runDataRetention(getDataRoot(), retentionPolicy, { dryRun: false });
+    if (gc.removed || gc.rotated) {
+      console.log(
+        `[mox] data retention removed=${gc.removed} rotated=${gc.rotated}`,
+      );
+    }
+  }
   for (const key of catalogs) {
     const { services } = expandMountKey(key);
     for (const up of services.length ? services : [key]) {
@@ -280,6 +372,14 @@ async function startSession(opts = {}) {
     }
     saveSession({ activeCatalogs: catalogs });
     merged = mergeCatalogs(catalogs);
+  } else {
+    // rules-active empty (≈ Whistle unselect): drop stale pack gate
+    const sync = syncEmptyPackPreferenceToSession();
+    if (sync.cleared) {
+      console.log(
+        '[mox] rules-active empty; cleared pack gate (selective, allowlist=0)',
+      );
+    }
   }
   if (opts.captureOpen) {
     const { normalizeProxyMode } = require('../lib/capture-filter');
@@ -466,6 +566,8 @@ async function startSession(opts = {}) {
       resolveCapturesDir,
       taskId,
       accessLogPath: path.join(auditDir(), 'proxy-access.jsonl'),
+      proxyLogLevel: opts.proxyLog,
+      dataRetention: cfg.dataRetention,
       deviceSetup: ip ? { lanIp: ip, port: proxyPort } : { lanIp: null, port: proxyPort },
       onDemand: scanDir
         ? {
@@ -486,6 +588,17 @@ async function startSession(opts = {}) {
     console.log(
       `[mox] proxy ${proxy.url} missPolicy=${proxy.missPolicy} trafficMode=${cfg.proxy.trafficMode || 'all-mock'} allowlist=${(cfg.proxy.mockAllowlist || []).length} rules=${merged.rules.length}`,
     );
+    {
+      const { resolveProxyLogLevel } = require('../lib/proxy-access-log');
+      const lvl = resolveProxyLogLevel(opts.proxyLog);
+      console.log(
+        `[mox] proxy log=${lvl}${
+          lvl === 'summary'
+            ? ' (mock+fail; --proxy-log=verbose or MOX_PROXY_LOG=verbose for all)'
+            : ''
+        }`,
+      );
+    }
     {
       const {
         buildDeviceSetupUrls,
@@ -533,21 +646,16 @@ async function startSession(opts = {}) {
     console.log('[mox] proxy disabled');
   }
 
-  const userDataDir = chromeProfileDir(primary);
-  const chrome = findChrome();
   const clientProxyHost = resolveClientProxyHost(proxyHost);
-  const proxyServerArg = `${clientProxyHost}:${proxyPort}`;
   const startUrl = cfg.browser.startUrl || 'http://127.0.0.1:8000';
-  const launchArgs = buildChromiumLaunchArgs({
-    userDataDir,
-    proxyServerArg,
-    clientProxyHost,
+  const launchPreview = launchProxyBrowser({
+    profileLabel: primary,
+    proxyHost,
     proxyPort,
     startUrl,
+    dryRun: true,
   });
-  const chromeCmd = chrome
-    ? `"${chrome}" ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`
-    : `(find Chromium/Chrome/Edge) ${launchArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+  const chromeCmd = launchPreview.chromeCmd;
 
   if (cfg.proxy.enabled) {
     console.log('');
@@ -557,18 +665,24 @@ async function startSession(opts = {}) {
   }
 
   console.log('');
-  console.log('===【Mock 自测浏览器】请只在此窗口自测===');
+  console.log('===【Mock 自测浏览器】mox start --open 或 mox open===');
   console.log(chromeCmd);
   console.log('');
 
   let chromePid = null;
-  if (cfg.proxy.enabled && cfg.browser.autoLaunch && chrome && fs.existsSync(chrome)) {
-    ensureChromeProfileDir(primary);
-    scrubChromeSessionRestore(userDataDir);
-    const child = spawn(chrome, launchArgs, { detached: true, stdio: 'ignore' });
-    child.unref();
-    chromePid = child.pid;
-    console.log(`[mox] launched Chrome pid=${chromePid} → ${startUrl}`);
+  if (cfg.proxy.enabled && cfg.browser.autoLaunch) {
+    const launched = launchProxyBrowser({
+      profileLabel: primary,
+      proxyHost,
+      proxyPort,
+      startUrl,
+    });
+    chromePid = launched.chromePid;
+    if (chromePid) {
+      console.log(`[mox] launched Chrome pid=${chromePid} → ${startUrl}`);
+    } else {
+      console.log('[mox] --open requested but Chrome/Chromium/Edge not found');
+    }
   }
 
   const state = {
@@ -649,6 +763,8 @@ module.exports = {
   buildChromiumLaunchArgs,
   resolveClientProxyHost,
   applySessionOpts,
+  launchProxyBrowser,
+  openProxyBrowser,
   lanIp,
 };
 

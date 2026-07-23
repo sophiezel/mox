@@ -2,10 +2,10 @@
 
 ## 模型
 
-- **一个**全局 session（`.data/session.json`）：端口、`trafficMode`、`mockAllowlist`、`cases`、`activeCatalogs`、派生 `activeRules`（展示用）。
+- **启用偏好**在本地 `.data/rules-active`（≈ Whistle `selectedList`；一行一包名；`#` 整行注释；不进 git）。与 session 分离：意图 vs 运行快照；**意图为空时 start 必须清掉残留 pack 门闸**。
 - Catalog **真源**在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`。`start --name=<upstreamId…>` 可同时挂多服务；省略 = 全部。
 - 共享 rule 包在包根 `rules/`（可 git）。
-- **启用偏好**在本地 `.data/rules-active`（一行一包名；`#` 整行注释；不进 git）。与 session 分离：意图 vs 运行快照。
+- **一个**全局 session（`.data/session.json`）：端口、`trafficMode`、`mockAllowlist`、`cases`、`activeCatalogs`、派生 `activeRules`（展示用）。
 
 ## 开关
 
@@ -15,10 +15,25 @@
 - `--name=a --name=b`（或 `--name=a,b`）挂载 catalog；省略 = 全部
 - `--rules a,b` / `--rules kw1 kw2` 启动时应用共享 rule（强制 `selective`），并写入 `.data/rules-active`：`rules/<name>.json` stub 包，或 Whistle-like `rules/<name>.txt` map；多值 merge，找不到的名字直接跳过；可与 `--capture-open` 同用（仍 selective + `proxy.mode=capture-open`）
 - 无 `--rules` 时若 `.data/rules-active` 非空 → plain `mox start` **重 apply**（覆盖上次 `mox traffic` 对手工 allowlist 的改动）
+- 无 `--rules` 且 `rules-active` 空/全注释、但 session 仍有 `activeRules` → **清 pack 门闸**（`selective` + 空 allowlist；对齐 Whistle unselect，便于 `--capture-open` 录真站）
 - `--scenario` 启动时初始场景（从第一个 catalog 的 scenarios/ 读）
 - `--traffic=all-mock|all-passthrough|selective` 启动时流量模式（写入全局 session）
 - `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 明文落盘；map/allowlist 仍可强制 mock）。**不等于**全透传；纯全透传请用 `mox traffic all-passthrough` 或 `--traffic=all-passthrough`
+- `--open` → 启动时代理 Chrome（默认**不**弹窗）；已运行会话用 `mox open`
 - `--scan-dir=DIR`（覆盖 session 中的 `scanDir`）：启用 **miss 时按页面源码即时 mock**
+
+## `.data` 生命周期（dataRetention）
+
+配置在 `session.dataRetention`（默认见 `config/default.session.json`）。通用原语在 `lib/data-retention.js`；域适配覆盖 captures / append 日志 / reports / chrome-profiles / 孤儿 service 壳。
+
+| 触发 | 行为 |
+|------|------|
+| `mox start` | quiet 全量 GC |
+| capture 写入后 | 该 `captures/` 目录按 maxFiles + maxAgeDays |
+| access log append | 超 `appendLogs.maxBytes` 则 rotate |
+| `mox gc [--dry-run]` | 显式全量，打印摘要 |
+
+Catalog 真源（mocks/contracts/proxy-rules 等）**不**参与 GC。
 
 ## proxy.mode（mock-lab | capture-open）
 
@@ -55,7 +70,7 @@ mox start --name=tower --rules jian-h5 xrk
 mox start --rules jian-h5 --capture-open   # selective mock + capture-open
 mox rules list
 mox rules save my-pack
-mox rules clear                      # 清 sticky + session 回 all-mock
+mox rules clear                      # 清 sticky + pack 门闸（selective, allowlist=0）
 ```
 
 文件：`<pkg>/rules/<name>.json` stub 包，或同名 `.txt` Whistle map（`--rules-dir=` / `MOX_RULES_DIR` 可改；同名时优先 `.json`）：
@@ -74,7 +89,7 @@ Sticky 偏好（本地，不进 git）：
 csp-trade
 ```
 
-多关键字 → stubs **并集**；写全局 session 后 ≤1s 热生效。改 `rules/*` 磁盘文件后 plain `start` / 再 `rules use` 会重 apply。`mox traffic allow/deny` 只改 session；有 sticky 时下次 start 会按 packs 覆盖。
+多关键字 → stubs **并集**；写全局 session 后 ≤1s 热生效。改 `rules/*` 或注释掉 `rules-active` 后 plain `start` / `rules use` / `rules clear` 会按意图重算门闸。`mox traffic allow/deny` 只改 session；有 sticky 时下次 start 会按 packs 覆盖。全 mock lab：`mox traffic all-mock`。
 
 ## 流量模式（WireMock proxy/intercept）
 
@@ -106,6 +121,21 @@ mox traffic all-mock                 # 自测
 ```
 
 热更新：写 `.data/session.json`；proxy ≤1s 经 `trafficLoader` 生效，无需重启。
+
+## 读 proxy access 日志
+
+- **文件全量**：`.data/audit/proxy-access.jsonl` 保留详细 `action`（如 `mitm-mock`、`mitm-traffic-passthrough`、`connect-mitm`），并附 `label` / `bucket`。
+- **控制台默认 `summary`**：只打 **mock 命中** 与 **fail**。可用 `mox start --proxy-log=verbose|silent` 或环境变量 `MOX_PROXY_LOG`（CLI 优先）。
+- `verbose`：控制台打全部（短 label；fail 带原始 action）；`silent`：控制台不打 access。
+
+一眼：
+
+| 控制台 | 含义 |
+|--------|------|
+| `mock` | 本地 mock 生效 |
+| `fail` | 出错/拒绝（括号内为详细 action） |
+
+深挖透传/隧道：翻 jsonl 的 `action`。
 
 ### Port 匹配
 
