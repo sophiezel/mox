@@ -40,6 +40,8 @@
 
 - **是什么：** `.data/services/<serviceId>/` 下 mocks / contracts / captures / proxy-rules / upstreams 的集合。
 - **作用：** 唯一 mock 真源；`mox start` 挂载后由 trafficMode / rules 决定是否拦截。
+- **开户：** `init`（可选加速）或 `mox merge`（正式开户）；**身份**只走 `resolveUpstreamId`。仅有 `captures/` 的目录是 staging，不算可挂载 catalog（需 `proxy-rules.json`）。
+- **卫生：** 测例必须隔离 `MOX_DATA_ROOT`；仓库里若出现 `promo-*` / 时间戳式目录名，视为测例泄漏，可手动 `rm -rf`。
 
 ## 契约与生成
 

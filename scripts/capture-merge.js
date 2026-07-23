@@ -1,7 +1,9 @@
 'use strict';
 
 /**
- * L7: merge proxy captures into contracts (additive only).
+ * Merge proxy captures into catalog mocks:
+ * - existing stub → additive L2 upgrade
+ * - missing stub → gated promote (contract + handler + proxy-rules)
  */
 const fs = require('fs');
 const path = require('path');
@@ -14,12 +16,16 @@ const {
   apiKey,
   listServiceIds,
   sanitizeUpstreamId,
+  parseStubId,
 } = require('../lib/paths');
 const { appendAudit } = require('../lib/audit');
 const { renderHandler, loadExistingContracts } = require('./generate-mock');
 const { isPlaceholderValue } = require('../lib/materialize');
 const { classifyFidelity } = require('../lib/gap-taxonomy');
 const { sanitizeCapture } = require('../lib/sanitize-capture');
+const { isCaptureNoiseHost } = require('../lib/capture-filter');
+const { upsertServiceRules } = require('../lib/catalog-merge');
+const { resolveServiceIdFromHost } = require('../lib/resolve-service-id-from-host');
 
 function deepMergeShape(target, sample) {
   if (sample == null) return target;
@@ -59,12 +65,9 @@ function mergeDataAdditive(existing, incoming) {
   if (Array.isArray(incoming)) {
     if (!Array.isArray(existing) || existing.length === 0) return incoming;
     if (incoming.length === 0) return existing;
-    return [
-      mergeDataAdditive(existing[0] || {}, incoming[0]),
-    ];
+    return [mergeDataAdditive(existing[0] || {}, incoming[0])];
   }
   if (typeof incoming !== 'object') {
-    // Scalar: real capture always preferred over placeholder / prior sample
     if (isPlaceholderValue(existing)) return incoming;
     return incoming;
   }
@@ -81,7 +84,6 @@ function mergeDataAdditive(existing, incoming) {
     ) {
       out[k] = mergeDataAdditive(out[k], v);
     } else if (typeof v !== 'object' || v === null) {
-      // Real leaf overwrites faker/init sample
       out[k] = v;
     } else if (Array.isArray(v)) {
       out[k] = mergeDataAdditive(out[k], v);
@@ -162,6 +164,145 @@ function listCaptureFiles(opts = {}) {
   return out;
 }
 
+function tryParseStubId(id) {
+  if (!id || typeof id !== 'string') return null;
+  try {
+    return parseStubId(id);
+  } catch {
+    return null;
+  }
+}
+
+function buildPromotedContract({ upstreamId, method, path: urlPath, host, data, id }) {
+  const shape = deepMergeShape({ type: 'object', props: {} }, data);
+  const contract = {
+    id,
+    stubId: id,
+    upstreamId,
+    hosts: host && host !== '_default' ? [host] : [],
+    method: [method],
+    path: urlPath.startsWith('/') ? urlPath : `/${urlPath}`,
+    source: 'capture',
+    role: 'dependency',
+    relatedToTask: false,
+    confidence: 'high',
+    lastTaskId: null,
+    history: [
+      {
+        taskId: null,
+        role: 'dependency',
+        at: new Date().toISOString(),
+        action: 'promote-from-capture',
+      },
+    ],
+    request: { query: {}, body: {}, headers: [] },
+    response: {
+      envelope: { code: 'number', data: 'object|null', message: 'string' },
+      source: 'usage+capture',
+      shape,
+    },
+    cases: [
+      {
+        id: 'success',
+        response: {
+          code: 0,
+          data,
+          message: '',
+        },
+        httpStatus: 200,
+      },
+      {
+        id: 'empty',
+        response: { code: 0, data: Array.isArray(data) ? [] : {}, message: '' },
+        httpStatus: 200,
+      },
+      {
+        id: 'biz_error',
+        response: { code: 1, data: null, message: 'biz error' },
+        httpStatus: 200,
+      },
+    ],
+    coverage: {
+      request: { keysFound: [], confidence: 'medium' },
+      response: {
+        confidence: 'high',
+        pathsFound: Object.keys(
+          typeof data === 'object' && data && !Array.isArray(data) ? data : {},
+        ),
+      },
+      enums: [],
+      gaps: [],
+    },
+  };
+  contract.fidelity = classifyFidelity(contract);
+  return contract;
+}
+
+function applyCaptureToContract(contract, data, { learnedHost = false } = {}) {
+  const success = contract.cases?.find((c) => c.id === 'success');
+  if (!success) return { ok: false, reason: 'no_success_case' };
+  const prev = success.response?.data;
+  const next = mergeDataAdditive(prev, data);
+  if (JSON.stringify(prev) === JSON.stringify(next) && !learnedHost) {
+    return { ok: false, reason: 'noop_unchanged' };
+  }
+  success.response = success.response || {};
+  success.response.data = next;
+  contract.response = contract.response || {};
+  contract.response.source = 'usage+capture';
+  contract.response.shape = deepMergeShape(
+    contract.response.shape || { type: 'object', props: {} },
+    data,
+  );
+  contract.fidelity = classifyFidelity(contract);
+  contract.coverage = contract.coverage || {
+    request: { keysFound: [] },
+    response: { pathsFound: [] },
+    enums: [],
+    gaps: [],
+  };
+  contract.coverage.gaps = (contract.coverage.gaps || []).filter(
+    (g) =>
+      g !== 'no_property_access' &&
+      g !== 'no_export_symbol' &&
+      g !== 'TRACE_EMPTY' &&
+      g !== 'no_callsite',
+  );
+  contract.coverage.response = {
+    ...contract.coverage.response,
+    confidence: 'high',
+    pathsFound: [
+      ...new Set([
+        ...(contract.coverage.response.pathsFound || []),
+        ...Object.keys(typeof data === 'object' && data && !Array.isArray(data) ? data : {}),
+      ]),
+    ],
+  };
+  return { ok: true };
+}
+
+function persistContractAndHandler(contract, upstreamId, method, { createHandler }) {
+  const up = sanitizeUpstreamId(upstreamId);
+  ensureServiceDirs(up);
+  const id = contract.stubId || contract.id;
+  const cPath = serviceContractPath(up, id);
+  fs.mkdirSync(path.dirname(cPath), { recursive: true });
+  fs.writeFileSync(cPath, `${JSON.stringify(contract, null, 2)}\n`);
+
+  const handlerFile = stubHandlerPath(null, up, method, contract.path);
+  const exists = fs.existsSync(handlerFile);
+  if (exists) {
+    const src = fs.readFileSync(handlerFile, 'utf8');
+    if (!src.includes('mox:manual')) {
+      fs.writeFileSync(handlerFile, renderHandler(contract));
+    }
+  } else if (createHandler) {
+    fs.mkdirSync(path.dirname(handlerFile), { recursive: true });
+    fs.writeFileSync(handlerFile, renderHandler(contract));
+  }
+  return cPath;
+}
+
 function captureMerge(labelOrOpts, maybeOpts) {
   const opts =
     maybeOpts != null
@@ -182,29 +323,48 @@ function captureMerge(labelOrOpts, maybeOpts) {
   const captureFiles = listCaptureFiles(opts);
   if (!captureFiles.length) {
     console.log('[mox] no captures');
-    return { merged: 0 };
+    return { merged: 0, upgraded: 0, created: 0, skipped: [] };
   }
 
   const contracts = loadExistingContracts();
   const upstreamsData = loadUpstreams();
-  let merged = 0;
+  let upgraded = 0;
+  let created = 0;
   let anyLearnedHost = false;
   const skipped = [];
+  const skippedByReason = {};
+
+  const pushSkip = (row) => {
+    skipped.push(row);
+    const r = row.reason || 'unknown';
+    skippedByReason[r] = (skippedByReason[r] || 0) + 1;
+  };
 
   for (const { file: f, dir: capturesDir } of captureFiles) {
     let cap;
     try {
       cap = JSON.parse(fs.readFileSync(path.join(capturesDir, f), 'utf8'));
     } catch {
-      skipped.push({ file: f, reason: 'invalid_json' });
+      pushSkip({ file: f, reason: 'invalid_json' });
       continue;
     }
     if (!cap.path) {
-      skipped.push({ file: f, reason: 'missing_path' });
+      pushSkip({ file: f, reason: 'missing_path' });
       continue;
     }
-    if (!cap.responseBody) {
-      skipped.push({
+    if (cap.bodyMeta && cap.bodyMeta.parseOk === false) {
+      pushSkip({
+        file: f,
+        reason: 'body_not_json',
+        host: cap.host,
+        path: cap.path,
+        method: cap.method,
+        hint: cap.bodyMeta.error || 'bodyMeta.parseOk=false',
+      });
+      continue;
+    }
+    if (cap.responseBody == null || cap.responseBody === '') {
+      pushSkip({
         file: f,
         reason: 'empty_responseBody',
         hint: 'capture had no body',
@@ -214,69 +374,28 @@ function captureMerge(labelOrOpts, maybeOpts) {
       });
       continue;
     }
+
     const host = cap.host || '_default';
     const method = (cap.method || 'GET').toUpperCase();
+    const urlPath = cap.path.startsWith('/') ? cap.path : `/${cap.path}`;
 
-    const legacyKey = apiKey({ host, method, path: cap.path });
-    let contract = contracts.get(legacyKey) || null;
-
-    let upstreamId = hostToUpstream(host, upstreamsData);
-    let learnedHost = false;
-
-    if (!contract && !upstreamId && host !== '_default') {
-      const matches = [];
-      for (const [, c] of contracts) {
-        if (c.path === cap.path && (c.method || ['GET']).includes(method)) {
-          matches.push(c);
-        }
-      }
-      if (matches.length === 1) {
-        upstreamId = matches[0].upstreamId || '_default';
-        contract = matches[0];
-        const up = upstreamsData.upstreams[upstreamId] || { hosts: [], canonicalHost: null };
-        if (!up.hosts.includes(host)) {
-          up.hosts.push(host);
-          upstreamsData.upstreams[upstreamId] = up;
-          learnedHost = true;
-          anyLearnedHost = true;
-        }
-      } else {
-        skipped.push({
-          file: f,
-          reason: 'unknown_or_ambiguous_host',
-          host,
-          path: cap.path,
-          method,
-          matchCount: matches.length,
-        });
-        continue;
-      }
-    }
-
-    if (!contract) {
-      const id = makeStubId({ upstreamId: upstreamId || '_default', method, path: cap.path });
-      contract = contracts.get(id);
-    }
-    if (!contract) {
-      skipped.push({ file: f, reason: 'no_contract', host, path: cap.path, method });
+    if (isCaptureNoiseHost(host)) {
+      pushSkip({ file: f, reason: 'noise_host', host, path: urlPath, method });
       continue;
     }
-
-    if (!upstreamId) {
-      upstreamId = contract.upstreamId || '_default';
-    }
-
-    const id = contract.stubId || contract.id || makeStubId({
-      upstreamId,
-      method,
-      path: cap.path,
-    });
 
     let body = cap.responseBody;
     if (typeof body === 'string') {
       try {
         body = JSON.parse(body);
       } catch {
+        pushSkip({
+          file: f,
+          reason: 'body_not_json',
+          host,
+          path: urlPath,
+          method,
+        });
         continue;
       }
     }
@@ -289,85 +408,195 @@ function captureMerge(labelOrOpts, maybeOpts) {
     }
     const data =
       body && typeof body === 'object' && 'data' in body ? body.data : body;
-    if (data == null) continue;
-
-    const success = contract.cases?.find((c) => c.id === 'success');
-    if (!success) continue;
-    const prev = success.response?.data;
-    const next = mergeDataAdditive(prev, data);
-    if (JSON.stringify(prev) === JSON.stringify(next) && !learnedHost) continue;
-
-    success.response.data = next;
-    contract.response = contract.response || {};
-    contract.response.source = 'usage+capture';
-    contract.response.shape = deepMergeShape(
-      contract.response.shape || { type: 'object', props: {} },
-      data,
-    );
-    contract.fidelity = classifyFidelity(contract);
-    contract.coverage = contract.coverage || {
-      request: { keysFound: [] },
-      response: { pathsFound: [] },
-      enums: [],
-      gaps: [],
-    };
-    contract.coverage.gaps = (contract.coverage.gaps || []).filter(
-      (g) =>
-        g !== 'no_property_access' &&
-        g !== 'no_export_symbol' &&
-        g !== 'TRACE_EMPTY' &&
-        g !== 'no_callsite',
-    );
-    contract.coverage.response = {
-      ...contract.coverage.response,
-      confidence: 'high',
-      pathsFound: [
-        ...new Set([
-          ...(contract.coverage.response.pathsFound || []),
-          ...Object.keys(typeof data === 'object' && !Array.isArray(data) ? data : {}),
-        ]),
-      ],
-    };
-
-    const up = sanitizeUpstreamId(contract.upstreamId || upstreamId || '_default');
-    ensureServiceDirs(up);
-    const cPath = serviceContractPath(up, contract.stubId || contract.id || id);
-    fs.mkdirSync(path.dirname(cPath), { recursive: true });
-    fs.writeFileSync(cPath, `${JSON.stringify(contract, null, 2)}\n`);
-
-    const handlerFile = stubHandlerPath(null, up, method, contract.path);
-    if (
-      fs.existsSync(handlerFile) &&
-      !fs.readFileSync(handlerFile, 'utf8').includes('mox:manual')
-    ) {
-      fs.writeFileSync(handlerFile, renderHandler(contract));
+    if (data == null) {
+      pushSkip({ file: f, reason: 'null_data', host, path: urlPath, method });
+      continue;
     }
 
+    // --- identity ---
+    let contract = null;
+    let upstreamId = hostToUpstream(host, upstreamsData);
+    let learnedHost = false;
+
+    const parsedCapStub = tryParseStubId(cap.stubId);
+    if (cap.stubId && contracts.has(cap.stubId)) {
+      contract = contracts.get(cap.stubId);
+    }
+    if (!contract && parsedCapStub) {
+      const id = makeStubId({
+        upstreamId: parsedCapStub.upstreamId,
+        method: parsedCapStub.method || method,
+        path: parsedCapStub.path || urlPath,
+      });
+      contract = contracts.get(id) || null;
+      if (!upstreamId) upstreamId = parsedCapStub.upstreamId;
+    }
+
+    const legacyKey = apiKey({ host, method, path: urlPath });
+    if (!contract) {
+      contract = contracts.get(legacyKey) || null;
+    }
+
+    if (!contract && !upstreamId && host !== '_default') {
+      const matches = [];
+      for (const [, c] of contracts) {
+        if (c.path === urlPath && (c.method || ['GET']).includes(method)) {
+          matches.push(c);
+        }
+      }
+      if (matches.length === 1) {
+        upstreamId = matches[0].upstreamId || '_default';
+        contract = matches[0];
+        const up =
+          upstreamsData.upstreams[upstreamId] || {
+            hosts: [],
+            canonicalHost: null,
+          };
+        if (!up.hosts.includes(host)) {
+          up.hosts.push(host);
+          upstreamsData.upstreams[upstreamId] = up;
+          learnedHost = true;
+          anyLearnedHost = true;
+        }
+      } else if (matches.length > 1) {
+        pushSkip({
+          file: f,
+          reason: 'unknown_or_ambiguous_host',
+          host,
+          path: urlPath,
+          method,
+          matchCount: matches.length,
+        });
+        continue;
+      }
+    }
+
+    if (!contract && upstreamId) {
+      const id = makeStubId({ upstreamId, method, path: urlPath });
+      contract = contracts.get(id) || null;
+    }
+
+    // Promote: no contract but resolvable upstream (map or derive)
+    if (!contract) {
+      if (!upstreamId) {
+        upstreamId = resolveServiceIdFromHost(host, {
+          upstreams: upstreamsData,
+        });
+      }
+      if (!upstreamId) {
+        pushSkip({
+          file: f,
+          reason: 'unresolved_upstream',
+          host,
+          path: urlPath,
+          method,
+        });
+        continue;
+      }
+      const upInfo =
+        upstreamsData.upstreams[upstreamId] || {
+          hosts: [],
+          canonicalHost: null,
+        };
+      if (host !== '_default' && !(upInfo.hosts || []).includes(host)) {
+        upInfo.hosts = [...(upInfo.hosts || []), host];
+        upInfo.canonicalHost = upInfo.canonicalHost || host;
+        upstreamsData.upstreams[upstreamId] = upInfo;
+        anyLearnedHost = true;
+      }
+      const id = makeStubId({ upstreamId, method, path: urlPath });
+      contract = buildPromotedContract({
+        upstreamId,
+        method,
+        path: urlPath,
+        host,
+        data,
+        id,
+      });
+      persistContractAndHandler(contract, upstreamId, method, {
+        createHandler: true,
+      });
+      upsertServiceRules(upstreamId, [
+        {
+          stubId: id,
+          id,
+          upstreamId,
+          methods: [method],
+          pathPrefix: urlPath,
+          hosts: host && host !== '_default' ? [host] : [],
+        },
+      ]);
+      contracts.set(id, contract);
+      if (contract.stubId) contracts.set(contract.stubId, contract);
+      created += 1;
+      appendAudit(label, {
+        command: 'capture-merge',
+        taskId: opts.taskId || null,
+        apiKey: id,
+        summary: 'promoted capture → new contract+handler',
+      });
+      continue;
+    }
+
+    if (!upstreamId) {
+      upstreamId = contract.upstreamId || '_default';
+    }
+
+    const applied = applyCaptureToContract(contract, data, { learnedHost });
+    if (!applied.ok) {
+      pushSkip({
+        file: f,
+        reason: applied.reason,
+        host,
+        path: urlPath,
+        method,
+        stubId: contract.stubId || contract.id,
+      });
+      continue;
+    }
+
+    persistContractAndHandler(contract, upstreamId, method, {
+      createHandler: false,
+    });
     appendAudit(label, {
       command: 'capture-merge',
       taskId: opts.taskId || null,
-      apiKey: contract.id || id,
-      summary: learnedHost ? 'merged capture + learned host alias' : 'merged capture response into contract',
+      apiKey: contract.id || contract.stubId,
+      summary: learnedHost
+        ? 'merged capture + learned host alias'
+        : 'merged capture response into contract',
     });
-    merged++;
+    upgraded += 1;
   }
 
   if (anyLearnedHost) {
     saveUpstreams(null, upstreamsData);
   }
 
+  const merged = upgraded + created;
   if (skipped.length) {
     const report = path.join(
       reportsDir(),
       `capture-merge-skipped-${Date.now()}.json`,
     );
-    fs.writeFileSync(report, `${JSON.stringify({ skipped }, null, 2)}\n`);
+    fs.writeFileSync(
+      report,
+      `${JSON.stringify({ skipped, skippedByReason, upgraded, created }, null, 2)}\n`,
+    );
     console.log(
       `[mox] capture-merge skipped=${skipped.length} (see ${report})`,
     );
+    const top = Object.entries(skippedByReason)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([k, n]) => `${k}=${n}`)
+      .join(' ');
+    if (top) console.log(`[mox] capture-merge skip reasons: ${top}`);
   }
-  console.log(`[mox] capture-merge merged=${merged}`);
-  return { merged, skipped };
+  console.log(
+    `[mox] capture-merge merged=${merged} upgraded=${upgraded} created=${created}`,
+  );
+  return { merged, upgraded, created, skipped, skippedByReason };
 }
 
 module.exports = { captureMerge, mergeDataAdditive, deepMergeShape };

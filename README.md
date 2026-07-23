@@ -128,13 +128,16 @@ mox quality-gate
 mox stop --name=demo
 ```
 
-**录真实响应写回 mock**（要能打到上游）：
+**录真实响应写回 mock**（要能打到上游；**不必**事先 `init`——host 可推导时 `merge` 会正式开户）：
 
 ```bash
-mox start --name=demo --capture-open
-# 浏览器走一遍主流程…
-mox stop --name=demo --auto-merge
+mox start --name=demo --capture-open   # 或已有 catalog 时省略 --name 挂载全部
+# 浏览器走一遍主流程…（无 stubId 的捕获按 host 推导进 services/<id>/captures/）
+mox merge   # 已有 stub 升 L2；无 stub 且 host 可推导 → 开户/promote；噪声显式 skip
+# 或：mox stop --name=demo --auto-merge
 ```
+
+测例泄漏的奇怪目录名（如 `promo-*`）不是产品开户结果，可手动删除。
 
 同一 session 里热切换：`mox traffic all-passthrough` → 操作 → `mox merge` → `mox mock`。
 

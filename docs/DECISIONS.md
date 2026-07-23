@@ -24,6 +24,7 @@
 |----|------|
 | 运行时 | **全局** `.data/session.json` + `.data/runtime.json`（单 mock 服务） |
 | **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
+| Catalog 开户 | **双开户、单身份**：`init`（可选，预填 L1）**或** `merge`（正式：upstreams + contract + handler + proxy-rules）；id 一律同一套推导。Capture 只按推导 id 写 `captures/`（staging），不单独算正式 catalog（挂载仍看 `proxy-rules.json`） |
 | **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
 | 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
 | Rules | 包根 `rules/*.json` stub 包或 `*.txt` Whistle map（或 `--rules-dir` / `MOX_RULES_DIR`）；`--rules=a,b` / 空格多值 **merge**，找不到的名字**跳过**；同名优先 `.json`；**启用偏好**本地 `.data/rules-active`（≈ Whistle `selectedList`；一行一包名，`#` 整行注释；`rules use` / `start --rules` 写入；plain `start` 按 packs **重 apply**；空/注释且 session 仍有 `activeRules` → **清 pack 门闸** `selective`+空 allowlist；`rules clear` 同） |
@@ -76,7 +77,8 @@ Classify 是否需要 LLM/人：仅当有 `--task` / `--related-from` / 明确�
 | Host 过滤 | `config/default.infer.json`：`denyHostSuffixes`（cdn、静态站启发式）；**无公司 allowlist 写死** |
 | 样例字段 | **禁止创造响应字段**；键只来自接口侧解构/`res.data.x` 或 capture 真实 body；**不**扫 UI state 改名 |
 | 样例值 | init 用 `@faker-js/faker`（固定 seed）仅给已有键填占位；`capture-merge` 用真实值覆盖并可并入真实 body 新键 |
-| 运行时补洞 | soft proxy → `captures/` → `capture-merge`（只增不盲删） |
+| 运行时补洞 | live proxy → `captures/`（按 host 推导 id 分目录）→ `capture-merge`：已有 stub **升 L2**；无 stub 时 host→service id（upstreams 优先，否则 `resolveUpstreamId`）且 body 合格 → **门禁新建** catalog（若尚无）+ contract/handler/proxy-rules；噪声 / 无法推导 / 非 JSON → 显式 skip。**不要求**事先 `init` |
+| Capture body | 写时按 `Content-Encoding` 解压后再 JSON；`bodyMeta.parseOk`；禁止把 gzip 二进制当 utf8 字符串落盘 |
 
 ## 场景引擎（对齐 WireMock 语义子集）
 

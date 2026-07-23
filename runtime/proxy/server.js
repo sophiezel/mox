@@ -27,6 +27,10 @@ const {
   normalizeProxyMode,
 } = require('../../lib/capture-filter');
 const {
+  decodeResponseBody,
+  captureBodyFromDecoded,
+} = require('../../lib/decode-response-body');
+const {
   pruneCapturesDir,
   rotateAppendLog,
   resolveRetentionPolicy,
@@ -129,7 +133,7 @@ function startProxyServer(opts) {
     /** optional extra noise suffixes merged with defaults */
     captureNoiseSuffixes = [],
     capturesDir,
-    /** optional (stubId) => captures dir for that stub's catalog */
+    /** optional (rec|{stubId,host}|stubId) => captures dir */
     resolveCapturesDir = null,
     taskId = null,
     accessLogPath,
@@ -292,8 +296,10 @@ function startProxyServer(opts) {
 
   function recordCapture(rec) {
     let dir = capturesDir;
-    if (typeof resolveCapturesDir === 'function' && rec.stubId) {
-      dir = resolveCapturesDir(rec.stubId) || dir;
+    if (typeof resolveCapturesDir === 'function') {
+      const resolved = resolveCapturesDir(rec);
+      if (resolved == null) return;
+      dir = resolved;
     }
     if (!dir) return;
     if (
@@ -558,7 +564,8 @@ function startProxyServer(opts) {
           path: urlPath,
           method,
           reason: 'passthrough-host',
-          responseBody: up?.bodyJson ?? up?.bodyText,
+          responseBody: up?.bodyMeta?.parseOk ? up.bodyJson : undefined,
+          bodyMeta: up?.bodyMeta,
         });
         return;
       }
@@ -606,13 +613,8 @@ function startProxyServer(opts) {
               res.writeHead(mockRes.statusCode || 200, outHeaders);
               res.end(buf);
               if (recordMockHits) {
-                let bodyJson;
-                const bodyText = buf.toString('utf8');
-                try {
-                  bodyJson = JSON.parse(bodyText);
-                } catch {
-                  bodyJson = undefined;
-                }
+                const decoded = decodeResponseBody(buf, mockRes.headers || {});
+                const bodyFields = captureBodyFromDecoded(decoded);
                 recordCapture({
                   host: hostname,
                   path: urlPath,
@@ -620,7 +622,7 @@ function startProxyServer(opts) {
                   reason: 'mock-hit',
                   caseId,
                   stubId: rule.stubId || rule.id || null,
-                  responseBody: bodyJson ?? bodyText,
+                  ...bodyFields,
                 });
               }
             });
@@ -822,7 +824,8 @@ function startProxyServer(opts) {
         query: Object.fromEntries(target.searchParams),
         reason: trafficReason,
         stubId: rule?.stubId || rule?.id || null,
-        responseBody: up?.bodyJson ?? up?.bodyText,
+        responseBody: up?.bodyMeta?.parseOk ? up.bodyJson : undefined,
+        bodyMeta: up?.bodyMeta,
       });
     } catch (err) {
       applyCorsHeaders(req, res, cors);
@@ -1070,13 +1073,8 @@ function startProxyServer(opts) {
             upRes.on('data', (c) => chunks.push(c));
             upRes.on('end', () => {
               const buf = Buffer.concat(chunks);
-              const bodyText = buf.toString('utf8');
-              let bodyJson;
-              try {
-                bodyJson = JSON.parse(bodyText);
-              } catch {
-                bodyJson = undefined;
-              }
+              const decoded = decodeResponseBody(buf, upRes.headers || {});
+              const bodyFields = captureBodyFromDecoded(decoded);
               if (!res.headersSent) {
                 res.writeHead(upRes.statusCode || 200, upRes.headers);
                 res.end(buf);
@@ -1113,7 +1111,7 @@ function startProxyServer(opts) {
                 reason: rule ? 'traffic-passthrough' : 'miss',
                 stubId: rule?.stubId || rule?.id || null,
                 status,
-                responseBody: bodyJson !== undefined ? bodyJson : bodyText,
+                ...bodyFields,
                 mitmPlaintext: true,
                 mode: resolvedProxyMode,
                 ...(requestBody !== undefined ? { requestBody } : {}),
@@ -1223,13 +1221,7 @@ function startProxyServer(opts) {
           upRes.on('data', (c) => chunks.push(c));
           upRes.on('end', () => {
             const buf = Buffer.concat(chunks);
-            const bodyText = buf.toString('utf8');
-            let bodyJson;
-            try {
-              bodyJson = JSON.parse(bodyText);
-            } catch {
-              bodyJson = undefined;
-            }
+            const decoded = decodeResponseBody(buf, upRes.headers || {});
             const status = upRes.statusCode || 200;
             if (status >= 400) {
               appendUpstreamFailure({
@@ -1246,7 +1238,18 @@ function startProxyServer(opts) {
               clientRes.writeHead(status, outHeaders);
               clientRes.end(buf);
             }
-            resolve({ status, bodyText, bodyJson });
+            resolve({
+              status,
+              bodyText: decoded.parseOk ? undefined : decoded.bodyText,
+              bodyJson: decoded.parseOk ? decoded.bodyJson : undefined,
+              bodyMeta: {
+                encoding: decoded.encoding,
+                parseOk: decoded.parseOk,
+                contentType: decoded.contentType,
+                byteLength: decoded.byteLength,
+                ...(decoded.error ? { error: decoded.error } : {}),
+              },
+            });
           });
         },
       );

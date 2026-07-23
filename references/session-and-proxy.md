@@ -35,6 +35,15 @@
 
 Catalog 真源（mocks/contracts/proxy-rules 等）**不**参与 GC。
 
+## Capture → merge
+
+1. **落盘**：proxy 对上游响应副本按 `Content-Encoding` 解压后再 `JSON.parse`；写入 `responseBody`（对象）+ `bodyMeta.parseOk`。客户端仍收原压缩包。
+2. **`mox merge` / `stop --auto-merge`**：
+   - 已有 stub（优先 `cap.stubId`）→ 真值升 L2（additive）
+   - 无 stub、host 能归属 upstream、非噪声、body 合格 → **新建** contract + handler + proxy-rules
+   - 否则显式 skip（`body_not_json` / `unresolved_upstream` / `noise_host` 等）
+3. 存量 gzip 乱码 capture 无法恢复，需重新 `--capture-open` 录制。
+
 ## proxy.mode（mock-lab | capture-open）
 
 | `proxy.mode` | 行为 |

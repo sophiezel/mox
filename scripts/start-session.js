@@ -10,6 +10,7 @@ const {
   ensureChromeProfileDir,
   auditDir,
   getGlobalRuntimePath,
+  serviceDataDir,
 } = require('../lib/paths');
 const {
   loadSession,
@@ -26,6 +27,7 @@ const {
   parseNameList,
   expandMountKey,
 } = require('../lib/catalog-merge');
+const { resolveCaptureStagingDir } = require('../lib/resolve-service-id-from-host');
 const { applyRulesToSession } = require('../lib/rules');
 const {
   resolveStartRuleKeywords,
@@ -301,10 +303,21 @@ async function startSession(opts = {}) {
     }
   }
 
+  const cfgForMode = applySessionOpts(loadSession(), opts);
+  const { normalizeProxyMode } = require('../lib/capture-filter');
+  const captureOpen =
+    normalizeProxyMode(cfgForMode.proxy?.mode) === 'capture-open';
+
   let catalogs = resolveActiveCatalogs({
     names: names.length ? names : undefined,
     allIfEmpty: true,
+    allowEmpty: captureOpen && !names.length,
   });
+  if (!catalogs.length && captureOpen) {
+    console.log(
+      '[mox] no catalogs yet — capture-open stages by host; mox merge opens formal catalogs',
+    );
+  }
   const { ensureServiceDirs, ensureDataDirs, auditDir, parseStubId, serviceDataDir, getDataRoot } =
     require('../lib/paths');
   ensureDataDirs();
@@ -354,7 +367,10 @@ async function startSession(opts = {}) {
     }
     // Remount after map upsert: pick up new services + refresh rules seed.
     if (!names.length) {
-      catalogs = resolveActiveCatalogs({ allIfEmpty: true });
+      catalogs = resolveActiveCatalogs({
+        allIfEmpty: true,
+        allowEmpty: captureOpen,
+      });
     } else {
       const live = loadSession();
       const extra = [];
@@ -392,7 +408,7 @@ async function startSession(opts = {}) {
     });
   }
 
-  let cfg = applySessionOpts(loadSession(catalogs[0]), opts);
+  let cfg = applySessionOpts(loadSession(catalogs[0] || undefined), opts);
   if (opts.traffic && !ruleKeywords.length) {
     const { normalizeTrafficMode } = require('../lib/traffic-mode');
     saveSession({
@@ -406,7 +422,7 @@ async function startSession(opts = {}) {
   if (opts.scenario) {
     const { setScenario } = require('./set-scenario');
     setScenario({
-      name: catalogs[0],
+      name: catalogs[0] || 'bootstrap',
       scenario: opts.scenario,
       taskId,
     });
@@ -435,15 +451,40 @@ async function startSession(opts = {}) {
     throw new Error(`proxy port in use: ${proxyHost}:${proxyPort} — ${hint}`);
   }
 
-  const primary = catalogs[0];
-  const mocksRoot = mocksRootFor(primary);
+  const primary = catalogs[0] || null;
+  const mocksRoot = primary
+    ? mocksRootFor(primary)
+    : path.join(getDataRoot(), 'services', '_bootstrap', 'mocks');
+  if (!primary) {
+    fs.mkdirSync(mocksRoot, { recursive: true });
+  }
   const resolveMocksRoot = (stubId) => {
     const slug = merged.stubToCatalog[stubId];
     return slug ? mocksRootFor(slug) : mocksRoot;
   };
-  const resolveCapturesDir = (stubId) => {
-    const slug = merged.stubToCatalog[stubId] || primary;
-    return capturesDirFor(slug);
+
+  const upstreamsSnap = { version: 1, upstreams: {} };
+  for (const up of catalogs) {
+    const p = path.join(serviceDataDir(up), 'upstreams.json');
+    if (!fs.existsSync(p)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      Object.assign(upstreamsSnap.upstreams, data.upstreams || {});
+    } catch {
+      /* ignore */
+    }
+  }
+  const resolveCapturesDir = (rec) => {
+    const stubId = typeof rec === 'string' ? rec : rec?.stubId;
+    const host = typeof rec === 'string' ? null : rec?.host;
+    return resolveCaptureStagingDir({
+      stubId,
+      host,
+      stubToCatalog: merged.stubToCatalog,
+      primary,
+      upstreams: upstreamsSnap,
+      captureNoiseSuffixes: cfg.proxy?.captureNoiseSuffixes || [],
+    });
   };
 
   const mock = await startMockServer({
@@ -455,11 +496,11 @@ async function startSession(opts = {}) {
     caseHeader: cfg.proxy.injectCaseHeader || 'x-mock-case',
     mode: cfg.proxy.mode || 'mock-lab',
     serveCaptureIfEmpty: Boolean(cfg.proxy.serveCaptureIfEmpty),
-    capturesDir: capturesDirFor(primary),
+    capturesDir: primary ? capturesDirFor(primary) : null,
   });
   process.env.MOX_PROXY_MODE = cfg.proxy.mode || 'mock-lab';
   console.log(
-    `[mox] mock ${mock.url} catalogs=${catalogs.join(',')} mode=${cfg.proxy.mode || 'mock-lab'}`,
+    `[mox] mock ${mock.url} catalogs=${catalogs.length ? catalogs.join(',') : '(none)'} mode=${cfg.proxy.mode || 'mock-lab'}`,
   );
 
   let proxy = null;
@@ -484,7 +525,7 @@ async function startSession(opts = {}) {
           `MITM CA not trusted — finish Always Trust in Keychain, then re-run mox start in Terminal.app (${trust.error || 'install failed'})`,
         );
       }
-      const ca = createMitmCa(primary);
+      const ca = createMitmCa(primary || 'bootstrap');
       mitm = {
         enabled: true,
         getSecureContext: (hostname) => ca.getSecureContext(hostname),
@@ -562,7 +603,7 @@ async function startSession(opts = {}) {
       allowOpenProxy,
       rejectUnauthorized: cfg.proxy.rejectUnauthorized !== false,
       mitm,
-      capturesDir: capturesDirFor(primary),
+      capturesDir: primary ? capturesDirFor(primary) : null,
       resolveCapturesDir,
       taskId,
       accessLogPath: path.join(auditDir(), 'proxy-access.jsonl'),
@@ -649,7 +690,7 @@ async function startSession(opts = {}) {
   const clientProxyHost = resolveClientProxyHost(proxyHost);
   const startUrl = cfg.browser.startUrl || 'http://127.0.0.1:8000';
   const launchPreview = launchProxyBrowser({
-    profileLabel: primary,
+    profileLabel: primary || 'bootstrap',
     proxyHost,
     proxyPort,
     startUrl,
@@ -672,7 +713,7 @@ async function startSession(opts = {}) {
   let chromePid = null;
   if (cfg.proxy.enabled && cfg.browser.autoLaunch) {
     const launched = launchProxyBrowser({
-      profileLabel: primary,
+      profileLabel: primary || 'bootstrap',
       proxyHost,
       proxyPort,
       startUrl,
@@ -700,7 +741,7 @@ async function startSession(opts = {}) {
   appendAudit(primary, {
     command: 'session start',
     taskId,
-    summary: `catalogs=${catalogs.join(',')} mock=${mockPort} proxy=${cfg.proxy.enabled ? proxyPort : 'off'}`,
+    summary: `catalogs=${catalogs.length ? catalogs.join(',') : '(none)'} mock=${mockPort} proxy=${cfg.proxy.enabled ? proxyPort : 'off'}`,
   });
 
   if (opts.detach) {
