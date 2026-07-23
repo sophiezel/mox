@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Docs
+- README / `install.sh` 收尾 tip：对齐 `--open` / `mox open` / `mox gc`、默认不弹浏览器与 `dataRetention`。
+
 ### Breaking
 - **`mox start` 默认不再自动打开浏览器**；需要时用 `mox start --open` 或已运行会话上的 `mox open`。已移除 `--no-auto-launch`。
 - **`.data` 自动生命周期**：`session.dataRetention` 约束 captures / append 日志 / reports / chrome-profiles / 无 `proxy-rules` 的空 service 壳；`mox start` quiet GC；显式 `mox gc [--dry-run]`。不删 catalog 真源。

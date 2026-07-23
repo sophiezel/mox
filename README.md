@@ -43,10 +43,11 @@ mox help --all    # 含较少用的命令
 cd /path/to/frontend-app
 mox init --name=demo
 mox start
-# 默认 MITM + 打开 http://127.0.0.1:8000；首次可能弹一次系统密码以信任 CA
+# 默认 MITM；不自动弹 Chrome（需要：mox start --open 或 mox open）
+# startUrl 默认 http://127.0.0.1:8000；首次可能弹一次系统密码以信任 CA
 ```
 
-Catalog（真源）在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`；运行时状态在全局 `.data/session.json`。`init` 会静默写出域草稿并尽量绑上 CRUD Store；`start` 默认清空 Store（保留用 `--keep-state`）。停掉：
+Catalog（真源）在 `.data/services/<upstreamId>/`；运维产物在全局 `.data/{classify,reports,audit,scenarios}/`；运行时状态在全局 `.data/session.json`。`captures` / access 日志 / chrome-profiles 等 ephemeral 数据受 `session.dataRetention` 约束（`mox start` 会 quiet GC，也可 `mox gc`）。`init` 会静默写出域草稿并尽量绑上 CRUD Store；`start` 默认清空 Store（保留用 `--keep-state`）。停掉：
 
 ```bash
 mox stop
@@ -175,8 +176,10 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | 命令 | 干什么 |
 |------|--------|
 | `init` | 扫描项目，生成 catalog（静默 domain-draft + CRUD Store 绑定） |
-| `start` / `stop` | 起停全局 mock+proxy；start 默认 reset Store；stop 打印 journal 摘要 |
-| `rules list\|use\|save` | 共享 rule：`.json` stub / `.txt` Whistle map；多值 merge |
+| `start` / `stop` | 起停全局 mock+proxy；start 默认不弹浏览器、quiet GC、reset Store；stop 打印 journal 摘要 |
+| `open` | 已有 session 时再开代理 Chrome（等同 `start --open` 的浏览器部分） |
+| `gc [--dry-run]` | 按 `dataRetention` 清理 captures / append 日志 / reports / chrome-profiles / 空 service 壳 |
+| `rules list\|use\|save\|clear` | 共享 rule：`.json` stub / `.txt` Whistle map；sticky `.data/rules-active`；多值 merge |
 | `map import <file>` | Whistle-like map pattern → selective + allowlist + 增量 proxy-rules |
 | `scenario` / `set-case` | 切场景或单个接口响应 |
 | `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
@@ -188,14 +191,14 @@ mox export-msw --out=./msw-handlers.js --name=demo
 旧名仍可用：`session start|stop`、`set-scenario`、`capture-merge` 等。
 
 `init` / `generate` 常用 flag：`--force` 清孤儿文件（默认不擦已录数据）；`--overwrite-capture` 才允许用法推断盖掉已录真值；`--strict-usage` 在追踪结果为空时失败。  
-`start` 常用 flag：`--rules=a,b`、`--capture-open`、`--proxy-log=verbose|silent`、`--keep-state`、`--mitm=0`、`--proxy-host=127.0.0.1`、`--no-open-proxy`。
+`start` 常用 flag：`--open`、`--rules=a,b`、`--capture-open`、`--proxy-log=summary|verbose|silent`、`--keep-state`、`--mitm=0`、`--proxy-host=127.0.0.1`、`--no-open-proxy`。
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
 | [`references/learning-path.md`](./references/learning-path.md) | L0→L6 分层引导（推荐系统学习） |
-| [`references/session-and-proxy.md`](./references/session-and-proxy.md) | traffic / `--rules` / Whistle map / `proxy.mode` |
+| [`references/session-and-proxy.md`](./references/session-and-proxy.md) | traffic / `--rules` / Whistle map / `proxy.mode` / `--open` / `dataRetention` |
 | [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md) | Playwright、真机、quality-gate、device prepare |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | 已锁定决策（真源） |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | 架构摘要 |
