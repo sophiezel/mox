@@ -104,8 +104,9 @@ mox rules use jian-h5 xrk    # 运行中热切换 + 更新 sticky
 mox rules list
 mox rules save my-pack       # 从当前 session 导出 .json
 mox rules clear              # 清 sticky；pack 门闸 → selective + 空 allowlist
-# 任意路径的 map 文件也可一次性导入：
+# 任意路径的 map 文件也可一次性导入（默认只改 session；落盘加 --save-as=<name>）：
 mox map import ./whistle-map.txt
+# mox map import ./whistle-map.txt --save-as=my-map
 ```
 
 **切场景**（成功 / 故障 / 慢）：
@@ -183,7 +184,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | `open` | 已有 session 时再开代理 Chrome（等同 `start --open` 的浏览器部分） |
 | `gc [--dry-run]` | 按 `dataRetention` 清理 captures / append 日志 / reports / chrome-profiles / 空 service 壳 |
 | `rules list\|use\|save\|clear` | 共享 rule：`.json` stub / `.txt` Whistle map；sticky `.data/rules-active`；多值 merge |
-| `map import <file>` | Whistle-like map pattern → selective + allowlist + 增量 proxy-rules |
+| `map import <file>` | Whistle-like map → selective + allowlist；默认不写 `rules/`；`--save-as=<name>` 才落盘 |
 | `scenario` / `set-case` | 切场景或单个接口响应 |
 | `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
 | `device prepare` | ADB：设 `http_proxy`、push CA、打印 WebView mitm-check |

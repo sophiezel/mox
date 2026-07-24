@@ -121,7 +121,7 @@ mox traffic all-passthrough          # 纯全透传录制（非 --capture-open�
 mox traffic selective
 mox start --rules=csp-trade           # rules/csp-trade.txt map pattern → selective
 mox start --rules=csp-trade,csp-tasks # multi merge；不存在的名字忽略
-mox map import ./whistle-map.txt     # 等价一次性导入（可 --save-as 落成 .json）
+mox map import ./whistle-map.txt     # 只改 session；要落盘规则包加 --save-as=<name>
 # map .txt 例：jian-j.example.com/csp-task   或  https://host/path /path
 # 拒绝纯 path（无 host）；path 前缀按 Whistle `/` 边界匹配
 mox traffic allow "GET svc-a/v1/items"

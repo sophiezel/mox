@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Breaking
+- **`mox map import` 默认不再写 `rules/map-import.json`**：只更新 session（selective allowlist）；要落盘规则包须显式 `--save-as=<name>`。
+
 ### Changed
 - **Capture→merge 管线**：写时按 `Content-Encoding` 解压再 JSON（`lib/decode-response-body.js` + `bodyMeta.parseOk`）；禁止 gzip 二进制当 utf8 落盘。
 - **`mox merge`**：已有 stub → 升 L2；无 stub 时 host→service id（upstreams 优先，否则 `resolveUpstreamId`）+ body 合格 → 正式开户（若尚无）+ contract/handler/proxy-rules；**不要求**事先 `init`；显式 skip（`body_not_json` / `unresolved_upstream` / `noise_host` / …）；日志 `upgraded` / `created`。

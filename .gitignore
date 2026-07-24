@@ -5,3 +5,4 @@ node_modules/
 session.local.json
 .DS_Store
 *.pid
+rules/map-import.json

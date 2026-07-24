@@ -100,6 +100,8 @@ test('map import sets trafficMode selective and allowlist for listed paths', () 
   const prevSession = process.env.MOX_SESSION_FILE;
   process.env.MOX_DATA_ROOT = root;
   process.env.MOX_SESSION_FILE = path.join(root, 'session.json');
+  const packageMapImport = path.join(__dirname, '..', 'rules', 'map-import.json');
+  const existedBefore = fs.existsSync(packageMapImport);
   try {
     const { ensureDataDirs } = require('../lib/paths');
     ensureDataDirs();
@@ -110,6 +112,7 @@ test('map import sets trafficMode selective and allowlist for listed paths', () 
     );
     const { applyMapImport } = require('../lib/map-import');
     const out = applyMapImport(mapFile);
+    assert.equal(out.savedRule, null);
     assert.ok(out.stubIds.length >= 1);
     assert.ok(
       out.stubIds.some((id) => /users/.test(id)),
@@ -126,6 +129,48 @@ test('map import sets trafficMode selective and allowlist for listed paths', () 
     );
     assert.ok(
       (cfg.proxy.captureMitmHosts || []).includes('api.example.com'),
+    );
+    // Default import must not pollute package rules/
+    assert.equal(
+      fs.existsSync(packageMapImport),
+      existedBefore,
+      'default map import must not create rules/map-import.json',
+    );
+  } finally {
+    if (prevData === undefined) delete process.env.MOX_DATA_ROOT;
+    else process.env.MOX_DATA_ROOT = prevData;
+    if (prevSession === undefined) delete process.env.MOX_SESSION_FILE;
+    else process.env.MOX_SESSION_FILE = prevSession;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('map import --save-as writes only under isolated rulesDir', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mox-map-save-'));
+  const prevData = process.env.MOX_DATA_ROOT;
+  const prevSession = process.env.MOX_SESSION_FILE;
+  process.env.MOX_DATA_ROOT = root;
+  process.env.MOX_SESSION_FILE = path.join(root, 'session.json');
+  const rulesDir = path.join(root, 'rules');
+  const packageMapImport = path.join(__dirname, '..', 'rules', 'map-import.json');
+  const existedBefore = fs.existsSync(packageMapImport);
+  try {
+    const { ensureDataDirs } = require('../lib/paths');
+    ensureDataDirs();
+    const mapFile = path.join(root, 'map.txt');
+    fs.writeFileSync(
+      mapFile,
+      'https://api.example.com/v1/users http://127.0.0.1/v1/users\n',
+    );
+    const { applyMapImport } = require('../lib/map-import');
+    const out = applyMapImport(mapFile, { saveAs: 'my-map', rulesDir });
+    assert.ok(out.savedRule);
+    assert.equal(out.savedRule.name, 'my-map');
+    assert.ok(fs.existsSync(path.join(rulesDir, 'my-map.json')));
+    assert.equal(
+      fs.existsSync(packageMapImport),
+      existedBefore,
+      'explicit saveAs must not touch package rules/map-import.json',
     );
   } finally {
     if (prevData === undefined) delete process.env.MOX_DATA_ROOT;

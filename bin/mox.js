@@ -96,7 +96,7 @@ Advanced / legacy (see references/guide-l6-advanced.md):
   mox set-case <apiId> <caseId>
   mox set-scenario <name>
   mox traffic <all-mock|all-passthrough|selective|allow|deny|list|clear> [stubId]
-  mox map import <file> [--save-as=name]
+  mox map import <file> [--save-as=name]   # default: session only; --save-as writes rules/<name>.json
   mox capture-merge [...]
   mox list-empty [--gap=GAP] [--all] [--name=serviceId…]
   mox quality-gate [--scenario=NAME] [--require-mitm-check=URL]
@@ -516,7 +516,7 @@ async function main() {
       const { applyMapImport } = require('../lib/map-import');
       try {
         const out = applyMapImport(file, {
-          saveAs: f['save-as'] || 'map-import',
+          saveAs: f['save-as'] || null,
           rulesDir: f['rules-dir'],
         });
         console.log(
@@ -527,6 +527,10 @@ async function main() {
         );
         if (out.savedRule) {
           console.log(`[mox] rules pack saved: ${out.savedRule.name}`);
+        } else {
+          console.log(
+            '[mox] rules pack not saved (session only; pass --save-as=<name> to write rules/<name>.json)',
+          );
         }
       } catch (e) {
         console.error(`[mox] ${e.message}`);
