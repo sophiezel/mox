@@ -46,18 +46,29 @@ case 形状（向后兼容）：
 ```json
 {
   "default": "success",
+  "requiredStubs": [
+    "POST jian-j/csp-task/external/trade/appoint/getTradeAppointList"
+  ],
   "apis": {
-    "GET api.example.com/v1/list": "http_500",
+    "POST jian-j/csp-task/external/trade/appoint/getTradeAppointList": "success",
     "GET api.example.com/v1/detail": "success"
   }
 }
 ```
+
+### requiredStubs（自动化前置门禁）
+
+E2E / CI **开跑前**应声明本场景依赖的 stubId。`mox set-scenario` / `mox quality-gate` 在 stub **缺失或无 handler** 时直接失败——避免跑到一半才被 `block-write` 403 打断。
+
+- **POST 当读**（如 `getXxxList`）仍须有 stub；**不会**按路径名自动透传未 mock 的 POST。
+- 缺 stub 时：先 `capture-open` + `merge` 或 init/手补，再写入 `requiredStubs`。
 
 CLI：
 
 ```bash
 mox set-scenario e2e-fault
 mox set-case <apiId> <caseId>
+mox quality-gate
 ```
 
 内置模板（`init` 时拷贝到项目 scenarios/）：`e2e-happy` / `e2e-fault` / `e2e-slow`。

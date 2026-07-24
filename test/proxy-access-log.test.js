@@ -9,6 +9,7 @@ const {
   shouldPrintConsole,
   formatConsoleLine,
   enrichAccessEntry,
+  captureHasUsableBody,
 } = require('../lib/proxy-access-log');
 
 test('ACTION_CLASS covers known proxy actions without dropping detail names', () => {
@@ -23,6 +24,7 @@ test('ACTION_CLASS covers known proxy actions without dropping detail names', ()
     'passthrough-host',
     'reject',
     'block-write',
+    'capture',
     'connect-mitm',
     'connect-tunnel',
     'connect-tunnel-cronet',
@@ -61,13 +63,17 @@ test('classifyAccess: mock and fail are signal; upstream/connect/tool are noise'
   });
 });
 
-test('summary prints only mock and fail', () => {
+test('summary prints mock, fail, and capture', () => {
   assert.equal(
     shouldPrintConsole({ action: 'mitm-mock' }, 'summary'),
     true,
   );
   assert.equal(
     shouldPrintConsole({ action: 'reject' }, 'summary'),
+    true,
+  );
+  assert.equal(
+    shouldPrintConsole({ action: 'capture' }, 'summary'),
     true,
   );
   assert.equal(
@@ -81,6 +87,51 @@ test('summary prints only mock and fail', () => {
   assert.equal(
     shouldPrintConsole({ action: 'mitm-options' }, 'summary'),
     false,
+  );
+});
+
+test('noise-host block-write is quiet in summary; business stays fail', () => {
+  const quiet = enrichAccessEntry({
+    action: 'block-write',
+    host: 'c-hzgt2.getui.com',
+    method: 'POST',
+    url: 'http://c-hzgt2.getui.com/api.php',
+  });
+  assert.equal(quiet.label, 'fail');
+  assert.equal(quiet.bucket, 'noise');
+  assert.equal(shouldPrintConsole(quiet, 'summary'), false);
+  assert.equal(shouldPrintConsole(quiet, 'verbose'), true);
+
+  const business = enrichAccessEntry({
+    action: 'block-write',
+    host: 'jian-j.guazi.com',
+    method: 'POST',
+    url: 'https://jian-j.guazi.com/x',
+  });
+  assert.equal(business.bucket, 'signal');
+  assert.equal(shouldPrintConsole(business, 'summary'), true);
+});
+
+test('block-write under capture-open is noise even for business host', () => {
+  const e = enrichAccessEntry({
+    action: 'block-write',
+    host: 'jian-j.guazi.com',
+    mode: 'capture-open',
+    method: 'POST',
+    url: 'https://jian-j.guazi.com/x',
+  });
+  assert.equal(e.bucket, 'noise');
+  assert.equal(shouldPrintConsole(e, 'summary'), false);
+});
+
+test('formatConsoleLine: capture label', () => {
+  assert.equal(
+    formatConsoleLine({
+      action: 'capture',
+      method: 'POST',
+      url: 'https://a/b',
+    }),
+    '[proxy] capture  POST https://a/b',
   );
 });
 
@@ -123,6 +174,31 @@ test('enrichAccessEntry keeps original action', () => {
   assert.equal(out.action, 'mitm-traffic-passthrough');
   assert.equal(out.label, 'upstream');
   assert.equal(out.bucket, 'noise');
+});
+
+test('captureHasUsableBody: block-write / empty / parse fail are not capture signals', () => {
+  assert.equal(
+    captureHasUsableBody({ reason: 'block-write', responseBody: '{}' }),
+    false,
+  );
+  assert.equal(captureHasUsableBody({ reason: 'miss', responseBody: '' }), false);
+  assert.equal(captureHasUsableBody({ reason: 'miss' }), false);
+  assert.equal(
+    captureHasUsableBody({
+      reason: 'miss',
+      responseBody: 'not-json',
+      bodyMeta: { parseOk: false },
+    }),
+    false,
+  );
+  assert.equal(
+    captureHasUsableBody({
+      reason: 'miss',
+      responseBody: '{"ok":true}',
+      bodyMeta: { parseOk: true },
+    }),
+    true,
+  );
 });
 
 test('resolveProxyLogLevel: CLI > env > summary; invalid throws', () => {

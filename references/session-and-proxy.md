@@ -133,16 +133,18 @@ mox traffic all-mock                 # 自测
 
 ## 读 proxy access 日志
 
-- **文件全量**：`.data/audit/proxy-access.jsonl` 保留详细 `action`（如 `mitm-mock`、`mitm-traffic-passthrough`、`connect-mitm`），并附 `label` / `bucket`。
-- **控制台默认 `summary`**：只打 **mock 命中** 与 **fail**。可用 `mox start --proxy-log=verbose|silent` 或环境变量 `MOX_PROXY_LOG`（CLI 优先）。
+- **文件全量**：`.data/audit/proxy-access.jsonl` 保留详细 `action`（如 `mitm-mock`、`mitm-traffic-passthrough`、`connect-mitm`、`capture`），并附 `label` / `bucket`。
+- **控制台默认 `summary`**：打 **mock**、**fail**、**capture**（落盘成功）。可用 `mox start --proxy-log=verbose|silent` 或环境变量 `MOX_PROXY_LOG`（CLI 优先）。
 - `verbose`：控制台打全部（短 label；fail 带原始 action）；`silent`：控制台不打 access。
+- **噪声 host**（如 `*.getui.com`）上的 `block-write`：仍写 jsonl，**不进 summary**（避免淹没业务 fail）。
 
 一眼：
 
 | 控制台 | 含义 |
 |--------|------|
 | `mock` | 本地 mock 生效 |
-| `fail` | 出错/拒绝（括号内为详细 action） |
+| `fail` | 出错/拒绝（括号内为详细 action；**mock-lab** 业务 host 的 `block-write` 会显示；噪声 host / `capture-open` 下的 `block-write` 不进 summary） |
+| `capture` | 上游响应已写入 `captures/` |
 
 深挖透传/隧道：翻 jsonl 的 `action`。
 
@@ -201,7 +203,7 @@ mox start
 - 浏览器/CDN 噪声（`*.google.com` 等）**永不落盘**（内置 denylist，与 scope 无关）
 - 全量摸底：`proxy.captureScope=all`（仍过滤噪声）；可加 `captureNoiseSuffixes`
 - `all-passthrough` / selective 未放行 → 透传 + 同上门闸录制（`reason=traffic-passthrough|traffic-selective-miss`）
-- 写接口默认禁止透传（`blockWritePassthrough`）
+- **写接口透传**（`blockWritePassthrough`）：`mock-lab` **默认拦截**（`true`）；`capture-open` **默认放行**（`false`，便于摸底落盘）。显式 `session.proxy.blockWritePassthrough` 覆盖 mode 默认。未 mock 的 POST **不会**按 path 猜测为读接口自动透传——自动化请用 scenario `requiredStubs` + `set-scenario` / `quality-gate`。
 
 ## 场景热更新
 

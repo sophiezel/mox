@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+- **`capture-open` 写透传**：`--capture-open` 默认 `blockWritePassthrough=false`（放行未 mock 的写方法以便摸底）；`mock-lab` 仍默认拦截。显式 `session.proxy.blockWritePassthrough` 可覆盖。
+- Proxy 控制台 `summary`：增加 **capture**（落盘成功）；噪声 host 上的 `block-write` 不进 summary（仍写 jsonl）。
+
+### Docs
+- `requiredStubs` + `set-scenario` / `quality-gate` 作为自动化前置门禁；未 mock 的 POST **不按 path 猜测**自动透传。
+
 ### Breaking
 - **`mox map import` 默认不再写 `rules/map-import.json`**：只更新 session（selective allowlist）；要落盘规则包须显式 `--save-as=<name>`。
 

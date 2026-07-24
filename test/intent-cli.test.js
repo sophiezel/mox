@@ -117,6 +117,7 @@ test('intent: start --capture-open persistence path writes proxy.mode=capture-op
     const applied = applySessionOpts(loadSession(slug), { captureOpen: true });
     assert.equal(applied.proxy.mode, 'capture-open');
     assert.notEqual(applied.proxy.recordMisses, false);
+    assert.equal(applied.proxy.blockWritePassthrough, false);
     assert.notEqual(applied.proxy.trafficMode, 'all-passthrough');
   });
 });

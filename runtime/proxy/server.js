@@ -41,6 +41,7 @@ const {
   formatConsoleLine,
   shouldPrintConsole,
   resolveProxyLogLevel,
+  captureHasUsableBody,
 } = require('../../lib/proxy-access-log');
 
 const DEFAULT_BODY_LIMIT = 10 * 1024 * 1024; // 10mb
@@ -322,7 +323,20 @@ function startProxyServer(opts) {
       .replace(/\W/g, '_')
       .slice(0, 80)}.json`;
     const file = path.join(dir, name);
-    fs.writeFile(file, `${JSON.stringify(rec, null, 2)}\n`, () => {
+    fs.writeFile(file, `${JSON.stringify(rec, null, 2)}\n`, (err) => {
+      if (!err && captureHasUsableBody(rec)) {
+        const pathPart = rec.path || '';
+        const url =
+          rec.url ||
+          `${rec.mitmPlaintext ? 'https' : 'http'}://${rec.host || ''}${pathPart}`;
+        logAccess({
+          action: 'capture',
+          method: rec.method,
+          url,
+          host: rec.host,
+          mode: rec.mode || resolvedProxyMode,
+        });
+      }
       try {
         pruneCapturesDir(dir, retention.captures);
       } catch {
@@ -791,12 +805,19 @@ function startProxyServer(opts) {
             data: null,
           }),
         );
-        logAccess({ action: 'block-write', method, url: target.href });
+        logAccess({
+          action: 'block-write',
+          method,
+          url: target.href,
+          host: hostname,
+          mode: resolvedProxyMode,
+        });
         recordCapture({
           host: hostname,
           path: urlPath,
           method,
           reason: 'block-write',
+          mode: resolvedProxyMode,
         });
         return;
       }

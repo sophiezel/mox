@@ -138,9 +138,10 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 **辅轨**：`start --capture-open` · `traffic all-passthrough` · `mock` · `merge`（`stop --auto-merge`） · `map import` · `device prepare`  
 **Advanced / 旧名（`help --all`）**：`service` · `domain-draft` · `materialize-service` · `classify` · `generate` · `session start\|stop` · `set-case` · `set-scenario` · `traffic …` · `capture-merge` · `list-empty` · `import-openapi` · `export-msw` · `audit` · install/uninstall  
 
-`--capture-open` → `proxy.mode=capture-open`（加宽 MITM 落盘，**不等于** `all-passthrough`）；与 `--traffic=` 互斥；纯全透传用 `mox traffic all-passthrough`。  
-`capture-open` 下 `proxy.captureMitmHosts`（map/`--rules` `.txt` 自动并入）可对名单 host MITM（无需 path rule）。  
-**空 mock 门禁（mock-lab）**：成功信封空 `data`/`TRACE_EMPTY` → HTTP **503**；`MOX_ALLOW_EMPTY_MOCK=1` 或 `capture-open` 可放行。  
+`--capture-open` → `proxy.mode=capture-open`（加宽 MITM 落盘，**不等于** `all-passthrough`）；与 `--traffic=` 互斥；纯全透传用 `mox traffic all-passthrough`。
+`capture-open` 下 `proxy.captureMitmHosts`（map/`--rules` `.txt` 自动并入）可对名单 host MITM（无需 path rule）。
+**写透传**：`capture-open` 默认 `blockWritePassthrough=false`（放行写方法以便摸底）；`mock-lab` 默认拦截。显式 session 字段可覆盖。
+**空 mock 门禁（mock-lab）**：成功信封空 `data`/`TRACE_EMPTY` → HTTP **503**；`MOX_ALLOW_EMPTY_MOCK=1` 或 `capture-open` 可放行。
 「零溢出」提测口径 = `mox quality-gate` exit 0（非字面 0 bug）。  
 默认 `help` 分层，不把辅轨/Advanced 冲淡主轨。  
 出错时打印 `see: references/guide-lN-….md#锚点`；系统学习见 [`references/learning-path.md`](../references/learning-path.md)。  

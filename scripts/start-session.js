@@ -245,6 +245,9 @@ function applySessionOpts(base, opts = {}) {
       ...(patch.proxy || {}),
       mode: normalizeProxyMode('capture-open'),
       recordMisses: true,
+      // Override mock-lab session default (true) so recording can POST.
+      // Set blockWritePassthrough:true under capture-open to re-block.
+      blockWritePassthrough: false,
     };
   }
   if (opts.scanDir) {
@@ -399,11 +402,13 @@ async function startSession(opts = {}) {
   }
   if (opts.captureOpen) {
     const { normalizeProxyMode } = require('../lib/capture-filter');
+    const prev = loadSession().proxy || {};
     saveSession({
       proxy: {
-        ...(loadSession().proxy || {}),
+        ...prev,
         mode: normalizeProxyMode('capture-open'),
         recordMisses: true,
+        blockWritePassthrough: false,
       },
     });
   }
@@ -592,7 +597,9 @@ async function startSession(opts = {}) {
       mockAllowlist: cfg.proxy.mockAllowlist || [],
       caseHeader: cfg.proxy.injectCaseHeader || 'x-mock-case',
       missPolicy: cfg.proxy.missPolicy || 'passthrough',
-      blockWritePassthrough: cfg.proxy.blockWritePassthrough !== false,
+      blockWritePassthrough: require('../lib/capture-filter').resolveBlockWritePassthrough(
+        cfg.proxy || {},
+      ),
       passthroughHosts: cfg.proxy.passthroughHosts || [],
       recordMisses: cfg.proxy.recordMisses !== false,
       recordMockHits: Boolean(cfg.proxy.recordMockHits || opts.recordMockHits),
@@ -635,7 +642,7 @@ async function startSession(opts = {}) {
       console.log(
         `[mox] proxy log=${lvl}${
           lvl === 'summary'
-            ? ' (mock+fail; --proxy-log=verbose or MOX_PROXY_LOG=verbose for all)'
+            ? ' (mock+fail+capture; --proxy-log=verbose or MOX_PROXY_LOG=verbose for all)'
             : ''
         }`,
       );
