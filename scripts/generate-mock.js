@@ -948,6 +948,45 @@ function generateMocks({
       const m = materializeStoreHandlers(up, stubs, { force: false });
       storeRewritten = storeRewritten.concat(m.rewritten);
       try {
+        const {
+          deriveAndMaterializeVirtualService,
+        } = require('../lib/virtual-service/derive');
+        const { observationFromContract } = require('../lib/virtual-service/observation');
+        const { serviceContractPath } = require('../lib/paths');
+        for (const stub of stubs) {
+          const cPath = serviceContractPath(up, stub.stubId);
+          if (!fs.existsSync(cPath)) continue;
+          let contract;
+          try {
+            contract = JSON.parse(fs.readFileSync(cPath, 'utf8'));
+          } catch {
+            continue;
+          }
+          const obs = observationFromContract(contract);
+          if (!obs) continue;
+          // Synthesize a page-shaped observation when response looks list-like
+          const data = obs.data;
+          if (
+            data &&
+            typeof data === 'object' &&
+            !Array.isArray(data) &&
+            (data.detail || data.list || data.records)
+          ) {
+            obs.requestBody = { page: 1, pageSize: data.pageSize || 10 };
+          }
+          deriveAndMaterializeVirtualService({
+            observations: [obs],
+            contract,
+            upstreamId: up,
+            stubId: stub.stubId,
+            method: stub.method,
+            path: stub.path,
+          });
+        }
+      } catch (e) {
+        console.warn(`[mox] virtual-service derive skipped for ${up}: ${e.message}`);
+      }
+      try {
         const draft = writeDomainDraft({
           upstreamId: up,
           stubs,

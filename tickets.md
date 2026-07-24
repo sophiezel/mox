@@ -1,37 +1,76 @@
-# Tickets: Block-write safe policy + capture visibility
+# Tickets: Virtual Service full-chain
 
-Safe write-block policy for mock-lab vs capture-open, quieter noise-host console, and capture success logs. Source: grilling Q1–Q4 + plan block-write safe policy. Does **not** auto-passthrough unmocked POST-as-read paths.
+Capture → merge → mock with Virtual Service first (`paginated-list` vertical slice). Source: plan Virtual Service full-chain + grill Q1–Q8.
 
-Work the **frontier**: any ticket whose blockers are all done. #1 and #2 may proceed in parallel; #3 last.
+Work the **frontier**: any ticket whose blockers are all done.
 
-## Capture-open allows write passthrough
+## Persist Store Seed and hydrate on start
 
-**What to build:** Under `mox start --capture-open`, unmocked POST/PUT/PATCH/DELETE can reach upstream so recording works (default `blockWritePassthrough=false`). Mock-lab keeps the default write block. Session may still force-enable blocking if explicitly set.
+**What to build:** Seed rows live under the Service Catalog; `mox start` hydrates them into the Virtual Service store after reset so restarts are reproducible.
 
 **Blocked by:** None — can start immediately.
 
-- [x] capture-open session has write passthrough enabled by default
-- [x] mock-lab (plain start) still blocks unmocked writes by default
-- [x] Explicit session/config true can still force block under capture-open
-- [x] Tests cover the mode → flag behaviour
+- [x] Seed upsert by id persists under `services/<id>/seeds/`
+- [x] `start` hydrates active catalog seeds after store reset
+- [x] Unit tests for seed IO + hydrate
 
-## Console: capture success + quiet noise block-write
+## Paginated-list Virtual Service (page + Snapshot fallback)
 
-**What to build:** When a capture is actually saved with a usable body, summary console shows `[proxy] capture …`. Noise-host `block-write` (e.g. push SDKs) does not spam summary; business-host missing-stub `block-write` in mock-lab still shows as `fail`. Full detail remains in proxy-access jsonl / verbose.
+**What to build:** Detect `paginated-list`, render VS handler that pages Seed; empty Seed returns Snapshot `success`.
 
-**Blocked by:** None — can start immediately (parallel with Capture-open allows write passthrough).
+**Blocked by:** Persist Store Seed and hydrate on start
 
-- [x] Successful capture disk write emits access action classified as capture (signal); summary prints it
-- [x] Empty/block-write shells without usable body do not emit capture success
-- [x] Noise-host block-write is noise under summary; business-host block-write remains fail/signal in mock-lab
-- [x] Unit tests for classify / shouldPrintConsole (and wire path as needed)
+- [x] Protocol detect + envelope learning
+- [x] Handler serves different pages from store
+- [x] Empty store falls back to Snapshot
 
-## Docs: requiredStubs as prereq gate (no POST-as-read passthrough)
+## Capture-merge derives paginated Virtual Service
 
-**What to build:** Docs state the safe automation path: declare scenario `requiredStubs` and fail via set-scenario / quality-gate **before** E2E runs. Clarify block-write meaning, that POST-as-read still needs stubs (no path-guess passthrough), and mock-lab vs capture-open write-block / console behaviour.
+**What to build:** `mox merge` unions multi-page captures into Seed and calls shared derive; `mox:manual` not overwritten.
 
-**Blocked by:** Capture-open allows write passthrough; Console: capture success + quiet noise block-write
+**Blocked by:** Paginated-list Virtual Service (page + Snapshot fallback)
 
-- [x] DECISIONS / session-and-proxy (and scenarios reference if missing) describe requiredStubs-first workflow
-- [x] Explicitly reject path-heuristic auto-passthrough for unmocked POST
-- [x] CHANGELOG notes capture-open write passthrough, capture console line, noise-host quieting
+- [x] Merge accumulates Observations per stub and runs derive
+- [x] Manual handlers skipped with `handler_manual_skipped`
+- [x] Missing handlers created on upgrade path
+
+## Init shares paginated-list derive
+
+**What to build:** `init`/`generate` uses the same derive entry for list-shaped contracts.
+
+**Blocked by:** Paginated-list Virtual Service (page + Snapshot fallback)
+
+- [x] generate-mock calls derive after CRUD materialize
+
+## Evidence-driven list query operators
+
+**What to build:** Multi-Observation differentials yield eq/sort operators; unchanged request fields do not filter.
+
+**Blocked by:** Capture-merge derives paginated Virtual Service
+
+- [x] `inferOperatorsFromObservations` + wired into paginated handler
+
+## Capture content fingerprint
+
+**What to build:** Identical capture bodies are not rewritten to disk; different pages still capture.
+
+**Blocked by:** None — can start immediately.
+
+- [x] Fingerprint gate in `recordCapture`
+
+## Merge report honesty
+
+**What to build:** Console/report expose unique stubs, vs_derived, hosts_learned, contract_only.
+
+**Blocked by:** Capture-merge derives paginated Virtual Service
+
+- [x] Report payload + console summary fields
+
+## Docs: glossary, decisions, ADR
+
+**What to build:** CONTEXT, DECISIONS, ADR, CHANGELOG aligned with Virtual Service first.
+
+**Blocked by:** Capture-merge derives paginated Virtual Service; Init shares paginated-list derive
+
+- [x] CONTEXT.md glossary
+- [x] ADR 0001 + DECISIONS + CHANGELOG

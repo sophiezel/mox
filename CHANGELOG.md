@@ -2,7 +2,14 @@
 
 ## Unreleased
 
+### Added
+- **Virtual Service 全链路（一期 `paginated-list`）**：Observation → Store Seed → ProtocolProfile → `mox:store` handler；`init`/`merge` 共用 `deriveAndMaterializeVirtualService`；`start` hydrate seeds；空 seed 回退 Snapshot。
+- Capture **content fingerprint** 去重（同 method+host+path+status+body 不重复落盘）。
+- Merge 报告：`unique_stubs` / `vs_derived` / `hosts_learned` / `contract_only` / `handler_manual_skipped`。
+- [`CONTEXT.md`](CONTEXT.md) 术语；[`docs/adr/0001-virtual-service-first.md`](docs/adr/0001-virtual-service-first.md)。
+
 ### Changed
+- Fidelity **L3**：contract 含 `virtualService.protocol` 时自动判定。
 - **`capture-open` 写透传**：`--capture-open` 默认 `blockWritePassthrough=false`（放行未 mock 的写方法以便摸底）；`mock-lab` 仍默认拦截。显式 `session.proxy.blockWritePassthrough` 可覆盖。
 - Proxy 控制台 `summary`：增加 **capture**（落盘成功）；噪声 host 上的 `block-write` 不进 summary（仍写 jsonl）。
 

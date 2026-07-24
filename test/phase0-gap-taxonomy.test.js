@@ -117,15 +117,20 @@ test('P0-F7: classifyFidelity L2 even when shape empty but capture present', () 
   assert.equal(classifyFidelity(c), 'L2');
 });
 
-test('P0-F8: classifyFidelity L3 reserved for scenario/stateful cases', () => {
-  // L3 not auto-detected from contract alone today; reserved for future.
+test('P0-F8: classifyFidelity L3 when virtualService protocol present', () => {
   const c = {
     response: { source: 'usage+capture', shape: { type: 'object', props: { id: { type: 'string' } } } },
     coverage: { gaps: [] },
     cases: [{ id: 'success' }, { id: 'empty' }],
+    virtualService: { protocol: 'paginated-list', resource: 'items' },
   };
-  // No automatic L3 today — stays L2 unless explicitly tagged.
-  assert.equal(classifyFidelity(c), 'L2');
+  assert.equal(classifyFidelity(c), 'L3');
+  const stillL2 = {
+    response: { source: 'usage+capture', shape: { type: 'object', props: { id: { type: 'string' } } } },
+    coverage: { gaps: [] },
+    cases: [{ id: 'success' }, { id: 'empty' }],
+  };
+  assert.equal(classifyFidelity(stillL2), 'L2');
 });
 
 test('P0-F9: classifyFidelity handles missing fields defensively', () => {

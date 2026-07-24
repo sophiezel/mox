@@ -293,10 +293,13 @@ function persistContractAndHandler(contract, upstreamId, method, { createHandler
   const exists = fs.existsSync(handlerFile);
   if (exists) {
     const src = fs.readFileSync(handlerFile, 'utf8');
-    if (!src.includes('mox:manual')) {
+    if (
+      !src.includes('mox:manual') &&
+      !src.includes('protocol=paginated-list')
+    ) {
       fs.writeFileSync(handlerFile, renderHandler(contract));
     }
-  } else if (createHandler) {
+  } else if (createHandler !== false) {
     fs.mkdirSync(path.dirname(handlerFile), { recursive: true });
     fs.writeFileSync(handlerFile, renderHandler(contract));
   }
@@ -330,14 +333,44 @@ function captureMerge(labelOrOpts, maybeOpts) {
   const upstreamsData = loadUpstreams();
   let upgraded = 0;
   let created = 0;
+  let hostsLearned = 0;
   let anyLearnedHost = false;
   const skipped = [];
   const skippedByReason = {};
+  /** @type {Map<string, { upstreamId: string, method: string, path: string, observations: object[], contract: object|null }>} */
+  const vsBucket = new Map();
+  const upgradedStubs = new Set();
+  const createdStubs = new Set();
+  const contractOnlyStubs = new Set();
 
   const pushSkip = (row) => {
     skipped.push(row);
     const r = row.reason || 'unknown';
     skippedByReason[r] = (skippedByReason[r] || 0) + 1;
+  };
+
+  const { observationFromCapture } = require('../lib/virtual-service/observation');
+  const rememberObs = (stubKey, upstreamId, method, urlPath, contract, cap, data) => {
+    if (!stubKey) return;
+    const obs = observationFromCapture({ ...cap, responseBody: cap.responseBody });
+    if (!obs) return;
+    obs.stubId = stubKey;
+    obs.data = data;
+    obs.method = method;
+    obs.path = urlPath;
+    if (!vsBucket.has(stubKey)) {
+      vsBucket.set(stubKey, {
+        upstreamId,
+        method,
+        path: urlPath,
+        observations: [],
+        contract,
+      });
+    }
+    const bucket = vsBucket.get(stubKey);
+    bucket.observations.push(obs);
+    if (contract) bucket.contract = contract;
+    bucket.upstreamId = upstreamId || bucket.upstreamId;
   };
 
   for (const { file: f, dir: capturesDir } of captureFiles) {
@@ -529,6 +562,8 @@ function captureMerge(labelOrOpts, maybeOpts) {
       contracts.set(id, contract);
       if (contract.stubId) contracts.set(contract.stubId, contract);
       created += 1;
+      createdStubs.add(id);
+      rememberObs(id, upstreamId, method, urlPath, contract, cap, data);
       appendAudit(label, {
         command: 'capture-merge',
         taskId: opts.taskId || null,
@@ -542,22 +577,36 @@ function captureMerge(labelOrOpts, maybeOpts) {
       upstreamId = contract.upstreamId || '_default';
     }
 
+    const stubKey = contract.stubId || contract.id;
     const applied = applyCaptureToContract(contract, data, { learnedHost });
     if (!applied.ok) {
+      if (applied.reason === 'noop_unchanged' && stubKey) {
+        rememberObs(stubKey, upstreamId, method, urlPath, contract, cap, data);
+      }
+      if (learnedHost && applied.reason === 'noop_unchanged') {
+        hostsLearned += 1;
+        anyLearnedHost = true;
+      }
       pushSkip({
         file: f,
         reason: applied.reason,
         host,
         path: urlPath,
         method,
-        stubId: contract.stubId || contract.id,
+        stubId: stubKey,
       });
       continue;
     }
 
+    if (learnedHost) {
+      hostsLearned += 1;
+      anyLearnedHost = true;
+    }
+
     persistContractAndHandler(contract, upstreamId, method, {
-      createHandler: false,
+      createHandler: true,
     });
+    rememberObs(stubKey, upstreamId, method, urlPath, contract, cap, data);
     appendAudit(label, {
       command: 'capture-merge',
       taskId: opts.taskId || null,
@@ -567,22 +616,63 @@ function captureMerge(labelOrOpts, maybeOpts) {
         : 'merged capture response into contract',
     });
     upgraded += 1;
+    if (stubKey) upgradedStubs.add(stubKey);
   }
 
   if (anyLearnedHost) {
     saveUpstreams(null, upstreamsData);
   }
 
+  const {
+    deriveAndMaterializeVirtualService,
+  } = require('../lib/virtual-service/derive');
+  let vsDerived = 0;
+  for (const [stubKey, bucket] of vsBucket) {
+    const contract =
+      bucket.contract ||
+      contracts.get(stubKey) ||
+      null;
+    const derived = deriveAndMaterializeVirtualService({
+      observations: bucket.observations,
+      contract,
+      upstreamId: bucket.upstreamId,
+      stubId: stubKey,
+      method: bucket.method,
+      path: bucket.path,
+    });
+    if (!derived.ok) continue;
+    vsDerived += 1;
+    if (derived.manualSkipped) {
+      contractOnlyStubs.add(stubKey);
+      pushSkip({
+        reason: 'handler_manual_skipped',
+        stubId: stubKey,
+        host: null,
+        path: bucket.path,
+        method: bucket.method,
+      });
+    }
+  }
+
   const merged = upgraded + created;
+  const reportPayload = {
+    skipped,
+    skippedByReason,
+    upgraded,
+    created,
+    hostsLearned,
+    vsDerived,
+    upgradedStubs: [...upgradedStubs],
+    createdStubs: [...createdStubs],
+    contractOnlyStubs: [...contractOnlyStubs],
+    uniqueStubsTouched: [...vsBucket.keys()],
+  };
   if (skipped.length) {
     const report = path.join(
       reportsDir(),
       `capture-merge-skipped-${Date.now()}.json`,
     );
-    fs.writeFileSync(
-      report,
-      `${JSON.stringify({ skipped, skippedByReason, upgraded, created }, null, 2)}\n`,
-    );
+    fs.writeFileSync(report, `${JSON.stringify(reportPayload, null, 2)}\n`);
     console.log(
       `[mox] capture-merge skipped=${skipped.length} (see ${report})`,
     );
@@ -594,9 +684,22 @@ function captureMerge(labelOrOpts, maybeOpts) {
     if (top) console.log(`[mox] capture-merge skip reasons: ${top}`);
   }
   console.log(
-    `[mox] capture-merge merged=${merged} upgraded=${upgraded} created=${created}`,
+    `[mox] capture-merge merged=${merged} upgraded=${upgraded} created=${created}` +
+      ` unique_stubs=${vsBucket.size} vs_derived=${vsDerived}` +
+      ` hosts_learned=${hostsLearned} contract_only=${contractOnlyStubs.size}`,
   );
-  return { merged, upgraded, created, skipped, skippedByReason };
+  return {
+    merged,
+    upgraded,
+    created,
+    skipped,
+    skippedByReason,
+    hostsLearned,
+    vsDerived,
+    upgradedStubs: [...upgradedStubs],
+    createdStubs: [...createdStubs],
+    contractOnlyStubs: [...contractOnlyStubs],
+  };
 }
 
 module.exports = { captureMerge, mergeDataAdditive, deepMergeShape };

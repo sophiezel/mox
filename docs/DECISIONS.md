@@ -23,7 +23,7 @@
 | 项 | 定稿 |
 |----|------|
 | 运行时 | **全局** `.data/session.json` + `.data/runtime.json`（单 mock 服务） |
-| **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
+| **Service Catalog（真源）** | `.data/services/<serviceId>/`（mocks / contracts / proxy-rules / upstreams / models / **captures** / **seeds** / **protocols**）；字段名仍为 `upstreamId`，值 = service id；由 `resolveUpstreamId`（host 族共识 → prefixKey；**忽略 hostVar**）唯一推导，**不加** `prefix-` |
 | Catalog 开户 | **双开户、单身份**：`init`（可选，预填 L1）**或** `merge`（正式：upstreams + contract + handler + proxy-rules）；id 一律同一套推导。Capture 只按推导 id 写 `captures/`（staging），不单独算正式 catalog（挂载仍看 `proxy-rules.json`） |
 | **全局运维产物** | `.data/classify/`、`.data/reports/`、`.data/audit/`、`.data/scenarios/`、`.data/exports/`（**不**按前端包名建树） |
 | 否决 | **废除** `.data/projects/<slug>/` 作为数据轴；前端目录只是 `init` 的扫描输入 |
@@ -46,14 +46,16 @@
 |----|------|
 | 定位 | 在现有 discover + proxy 之上增加 **Virtual Service**：可 mock 响应，也可 mock 同 upstream 的状态与副作用 |
 | 热路径 | proxy → Virtual Service **禁止 LLM**（确定性） |
-| Store | 按 `upstreamId` 作用域的内存 KV / collection；**`start` 默认 `resetStore('*')`**（高级 `--keep-state`）；运行中可用 `service reset` |
-| CRUD | 仅对确定性识别的 resource cluster 在 `init`/`generate` **自动**绑 Store；非 CRUD 保持 static cases 或 scenario FSM |
+| 运行时优先 | **Virtual Service 优先**（Seed 非空）；否则 Snapshot；`deriveAndMaterializeVirtualService` 由 `init`/`merge` 共用；一期 `paginated-list` |
+| Store | 按 `upstreamId` 作用域的内存 KV / collection；**`start` 默认 `resetStore('*')` 再 hydrate Store Seed**（高级 `--keep-state`）；Seed 在 `services/<id>/seeds/` |
+| CRUD | 确定性 resource cluster 仍自动绑 Store；**协议优先**单 stub 可升 VS；查询算子证据驱动 |
 | 域模型草稿 | `init`/`generate` **静默**写 `models.json` / `domain-draft.md`；高级 `domain-draft` / `materialize-service` 仅用于重绑与排障；表结构 = 虚拟实体 schema，不连真库 |
 | Journal | 命中 Virtual Service 时记入内存并落盘 `.data/service-journal.json`；**`stop` / Ctrl+C 打印一行摘要**；明细用 `service journal` |
 | Catalog 解析真源 | **统一**走 `lib/catalog-merge`：`loadContractsForCatalog` / `loadContractsAcross` / `handlerExistsForContract` / `listMockKeysForCatalog` / `mocksRootFor`；smoke、list-empty、export-msw、classify/generate 只认 `services/*` |
 | `start --detach` | 父进程 spawn 独立子进程（`detached`），写 `runtime.json` pid；父进程退出后 session 仍存活；结束用 `mox stop` |
 | 全链 E2E | 通用 `scripts/run-project-e2e.js`（`FRONTEND_DIR`）；产品码禁止公司路径/域名硬编码 |
-| 保真度 L3 | store 或 scenario 生效且可 reset |
+| 保真度 L3 | contract 含 `virtualService.protocol`，或 store/scenario 生效 |
+| `mox:manual` | derive **永不覆盖**；可更新 Seed（`handler_manual_skipped`） |
 
 ## Classify
 

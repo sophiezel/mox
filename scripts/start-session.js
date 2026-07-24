@@ -349,6 +349,21 @@ async function startSession(opts = {}) {
     }
   }
 
+  {
+    const { hydrateSeedsIntoStores } = require('../lib/virtual-service/seed-store');
+    const seedIds = [];
+    for (const key of catalogs) {
+      const { services } = expandMountKey(key);
+      for (const up of services.length ? services : [key]) seedIds.push(up);
+    }
+    const hydrated = hydrateSeedsIntoStores(
+      seedIds.length ? [...new Set(seedIds)] : undefined,
+    );
+    if (hydrated) {
+      console.log(`[mox] store seeds hydrated=${hydrated}`);
+    }
+  }
+
   let merged = mergeCatalogs(catalogs);
   saveSession({ activeCatalogs: catalogs });
 

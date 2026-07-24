@@ -318,12 +318,21 @@ function startProxyServer(opts) {
     ) {
       return;
     }
+    const {
+      captureContentKey,
+      globalSeen,
+    } = require('../../lib/capture-fingerprint');
+    const fp = captureContentKey(rec);
+    if (fp && globalSeen.has(dir, fp)) {
+      return;
+    }
     fs.mkdirSync(dir, { recursive: true });
     const name = `${Date.now()}-${(rec.host || 'h').replace(/\W/g, '_')}-${rec.path
       .replace(/\W/g, '_')
       .slice(0, 80)}.json`;
     const file = path.join(dir, name);
     fs.writeFile(file, `${JSON.stringify(rec, null, 2)}\n`, (err) => {
+      if (!err && fp) globalSeen.add(dir, fp);
       if (!err && captureHasUsableBody(rec)) {
         const pathPart = rec.path || '';
         const url =
