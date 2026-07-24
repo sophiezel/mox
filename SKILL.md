@@ -46,7 +46,7 @@ disable-model-invocation: true
 
 - [ ] 优先 CLI：`mox init` / `start` / `stop` / `scenario`（旧名 `session start` / `set-scenario` 仍可用）
 - [ ] 需求自测提醒 `--task=<需求ID>`（changelog 溯源）
-- [ ] **禁止臆造** `new` 的 IO：无 docs/OpenAPI/用户定义时 BLOCK generate
+- [ ] **禁止臆造** `new` 的 IO：无 docs/OpenAPI/`import-doc`/用户定义时 BLOCK generate
 - [ ] modify 冲突：展示 `reports/contract-conflicts.md`，未决议不覆盖
 - [ ] 不改业务仓（除非用户明确 `--write-project-config`）
 - [ ] 不依赖 Whistle/Charles；真机 Wi‑Fi 代理 → `proxyPort`
@@ -93,6 +93,8 @@ mox stop
 # Android 助手: mox device prepare --lan-ip=<LAN>
 # 仅本机: --proxy-host=127.0.0.1   收紧 LAN: --no-open-proxy
 # OpenAPI: mox import-openapi --from=./openapi.json
+# Wiki/Markdown: mox import-doc --file=./notes.md --name=demo
+#   URL: MOX_DOC_FETCH_CMD='… {url} {outDir}' mox import-doc --from=https://…
 ```
 
 详情与真机/`--proxy-host` → [`README.md`](./README.md)。**HTTPS MITM 默认开启**（系统信任 CA，无 Chrome ignore 旗标）。

@@ -154,11 +154,13 @@ mox device prepare --lan-ip=<LAN>
 
 见 [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md)。
 
-**补空数据 / 导入 OpenAPI**：
+**补空数据 / 导入 OpenAPI / 文档**：
 
 ```bash
 mox list-empty --name=demo
 mox import-openapi --from=./openapi.json --name=demo
+mox import-doc --file=./api-notes.md --name=demo
+# URL 需外置拉取：MOX_DOC_FETCH_CMD='… {url} {outDir}' mox import-doc --from=https://…
 ```
 
 **部分接口 mock、其余透传**：
@@ -187,6 +189,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | `map import <file>` | Whistle-like map → selective + allowlist；默认不写 `rules/`；`--save-as=<name>` 才落盘 |
 | `scenario` / `set-case` | 切场景或单个接口响应 |
 | `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
+| `import-openapi` / `import-doc` | OpenAPI 或 Wiki/Markdown → Observation → catalog（doc：`MOX_DOC_FETCH_CMD` / `--file`） |
 | `device prepare` | ADB：设 `http_proxy`、push CA、打印 WebView mitm-check |
 | `smoke [--ci]` | 冒烟 |
 | `start --capture-open` / `traffic all-passthrough` / `mock` / `merge` | 加宽落盘、全透传、切回 mock、写回 |
@@ -202,6 +205,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | 文档 | 内容 |
 |------|------|
 | [`references/learning-path.md`](./references/learning-path.md) | L0→L6 分层引导（推荐系统学习） |
+| [`references/import-doc.md`](./references/import-doc.md) | Wiki/Markdown → Observation（`mox import-doc`） |
 | [`references/session-and-proxy.md`](./references/session-and-proxy.md) | traffic / `--rules` / Whistle map / `proxy.mode` / `--open` / `dataRetention` |
 | [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md) | Playwright、真机、quality-gate、device prepare |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | 已锁定决策（真源） |

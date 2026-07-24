@@ -98,6 +98,9 @@ fixtures/     Synthetic frontend samples for tests/smoke
 | `scripts/rules-cli.js` | Rule packs CLI | keep | |
 | `scripts/smoke-cases.js` | HTTP smoke | keep | Via catalog-merge |
 | `scripts/import-openapi.js` | OpenAPI import | keep | |
+| `scripts/import-doc.js` | Wiki/Markdown Observation import | keep | |
+| `lib/doc-source/` | DocFetcher + deterministic extractors | keep | |
+| `test/import-doc.test.js` | import-doc unit coverage | keep | |
 | `scripts/export-msw.js` | MSW export | keep | |
 | `scripts/service-cli.js` | Store reset/journal | keep | Advanced |
 | `scripts/domain-draft-cli.js` | Domain draft / materialize | keep | Advanced |

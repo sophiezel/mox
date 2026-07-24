@@ -51,7 +51,9 @@
 | **handler / mocks** | `mocks/<METHOD>/<path>/index.js` 运行时响应实现 |
 | **shape** | 响应结构描述；禁止发明字段 |
 | **envelope** | 常见 `{ code, data, message }` 包装 |
-| **fidelity L0–L3** | 空 → usage/OpenAPI → capture 真值 → Store/scenario |
+| **Observation** | 一次可观察的请求/响应（usage / capture / wiki-doc） |
+| **DocFetcher** | `mox import-doc` 的拉取层：`--file` 或 `MOX_DOC_FETCH_CMD` → `.data/docs/` |
+| **fidelity L0–L3** | 空 → usage/OpenAPI/wiki → capture 真值 → Store/scenario |
 | **adapter** | 可选推断插件（如 `create-request`） |
 | **classify role** | new / modify / dependency / unrelated |
 | **coverage.gaps** | 证据缺口（如 TRACE_EMPTY） |
@@ -67,6 +69,7 @@
 | **scenario** | `.data/scenarios/<name>.json` 批量切 case |
 | **proxy / mock** | 正向代理 + mock 服务（零侵入） |
 | **capture / capture-merge** | 录制 body → 合并进 contract |
+| **import-doc** | Wiki/Markdown → Observation → catalog（弱于 capture） |
 
 ## 虚拟后端
 

@@ -25,3 +25,4 @@ mox already had L5 CRUD `mox:store` materialize on init, but capture-merge never
 - Fidelity **L3** means Virtual Service protocol present on the contract.
 - New catalogs gain `seeds/` and `protocols/` artifacts.
 - Further protocols (keyed-detail, etc.) plug into the same derive entry without changing the Snapshot fallback contract.
+- A third Observation ingest (`mox import-doc`) reuses the same derive path; wiki Observations are `source=wiki` / `fidelity=doc` and lose to capture on conflict (see [`references/import-doc.md`](../../references/import-doc.md)).

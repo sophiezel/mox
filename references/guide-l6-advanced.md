@@ -24,7 +24,7 @@ mox help --all
 | `domain-draft` | 刷新/确认域草稿 | `mox domain-draft --upstream=api --confirm` |
 | `materialize-service` | 强制重绑 store handlers | `mox materialize-service --upstream=api --force` |
 | `classify` / `generate` | 拆开重跑推导 | 见 [L1](./guide-l1-frontend-infer.md) |
-| `traffic` / `list-empty` / `import-openapi` / `export-msw` / `audit` | 精细流量与保真度 | 见 [L2](./guide-l2-runtime.md) 工具书 |
+| `traffic` / `list-empty` / `import-openapi` / `import-doc` / `export-msw` / `audit` | 精细流量与保真度 | 见 [L2](./guide-l2-runtime.md) 工具书；文档导入见 [import-doc](./import-doc.md) |
 
 <a id="repair"></a>
 

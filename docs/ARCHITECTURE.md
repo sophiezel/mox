@@ -78,18 +78,18 @@ Proxy → TrafficPolicy → VirtualService → Handler
 
 | 级 | 含义 | 升阶 |
 |----|------|------|
-| **L0** | 空信封，无 shape | `import-openapi` / 更好用法 / capture |
-| **L1** | usage/OpenAPI shape + 占位值 | `traffic` 透传 + `capture-merge` |
+| **L0** | 空信封，无 shape | `import-openapi` / `import-doc` / 更好用法 / capture |
+| **L1** | usage/OpenAPI/wiki shape + 占位或文档样例 | `traffic` 透传 + `capture-merge` |
 | **L2** | 已 capture 真值 | 可选 scenario |
 | **L3** | Store 有状态 / Scenario FSM（可 reset） | `start` 默认 reset；高级 `service reset` / scenario |
 
-**纪律**：Shape 永不发明键；真值只来自 capture / OpenAPI；materialize（jsf）只填已有键。
+**纪律**：Shape 永不发明键；真值优先来自 capture；OpenAPI / wiki-doc 可补 shape 或弱样例（wiki：`source=wiki`，与 capture 冲突时 capture 胜出）；materialize（jsf）只填已有键。
 
 Shape 通道（有界静态推断，见 [`references/infer-from-usage.md`](../references/infer-from-usage.md)）：
 
 - **DeclarativeFieldSource**：按 JSX 属性名提取 `columns[].dataIndex` / `fieldNames` 等；项目可在 `.mox/infer.json` 注册自定义 prop 名。
 - **一层跨文件 props-drill**：父传 `detail={payload}`，子读 `detail.name` → 回连到响应 shape。
-- 超出边界 → `TRACE_EMPTY` / `props_shallow_only`，导向 capture / OpenAPI。
+- 超出边界 → `TRACE_EMPTY` / `props_shallow_only`，导向 capture / OpenAPI / `import-doc`。
 
 ## 数据目录
 
@@ -101,7 +101,8 @@ rules/                         共享 rule 包（可 git；stub 级标签）
   runtime.json                 当前进程状态
   service-journal.json         Virtual Service 命中日志（跨进程 stop 摘要）
   classify/                    最近一次扫描 request-roles.json
-  reports/                     init / smoke / openapi 报告
+  reports/                     init / smoke / openapi / doc-import 报告
+  docs/<slug>/                 import-doc 文档快照（index.md）
   audit/                       changelog.jsonl + proxy-access.jsonl
   scenarios/                   全局 scenario 文件
   exports/                     export-msw 等

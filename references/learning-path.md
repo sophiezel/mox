@@ -33,3 +33,12 @@
 | `stop` | journal 一行摘要 | `service journal`（除非要看 JSON 明细） |
 
 高级命令全集：`mox help --all`。
+
+## 工具书附录（按需）
+
+| 主题 | 文档 |
+|------|------|
+| Wiki / Markdown 导入 | [import-doc.md](./import-doc.md) |
+| 契约字段 | [contract-schema.md](./contract-schema.md) |
+| 用法推断 | [infer-from-usage.md](./infer-from-usage.md) |
+| Session / 代理 | [session-and-proxy.md](./session-and-proxy.md) |

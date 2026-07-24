@@ -83,6 +83,7 @@ mox stop
 ## 边界与下一层
 
 本层**不要求**理解 Store、upstream、录制。  
+空 stub 可稍后用 `import-openapi` / `import-doc` / `capture-merge` 升阶（见 [import-doc](./import-doc.md)）。  
 常见失败见下方锚点。下一层：[L1 前端推导](./guide-l1-frontend-infer.md)。
 
 <a id="port-in-use"></a>

@@ -12,6 +12,6 @@
 | 目录清单（KEEP / UPDATE / DELETE） | [`REPO_MAP.md`](./REPO_MAP.md) |
 | 未做事项 | [`BACKLOG.md`](./BACKLOG.md) |
 | Agent 裁决卡 | [`SKILL.md`](../SKILL.md) |
-| 操作工具书 | [`references/`](../references/) |
+| 操作工具书 | [`references/`](../references/)（含 [`import-doc.md`](../references/import-doc.md)） |
 
 冲突时优先级：`DECISIONS.md` > `ARCHITECTURE.md` > README 摘要 > archive。

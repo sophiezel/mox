@@ -73,10 +73,10 @@
 
 | 级 | 含义 | 升阶动作 |
 |----|------|----------|
-| **L0** | 空信封：无 shape，`data={}` | `capture-merge` 或 `import-openapi` 补 shape |
-| **L1** | usage/OpenAPI shape + 占位值 | `session` + `capture-merge` 换真值 |
+| **L0** | 空信封：无 shape，`data={}` | `capture-merge` / `import-openapi` / `import-doc` 补 shape |
+| **L1** | usage/OpenAPI/wiki shape + 占位或文档样例 | `session` + `capture-merge` 换真值 |
 | **L2** | 已 capture 真实 body（`source=usage+capture`） | 可选：`set-case` 加场景 |
-| **L3** | 场景 / 有状态（预留，暂不自动判定） | — |
+| **L3** | 场景 / 有状态（含 Virtual Service protocol） | — |
 
 报告 `coverage-summary.json` 含 `fidelity: {L0,L1,L2,L3}` 与 `gapsByType`、`emptyStubsByGap`、`deadExports`。
 

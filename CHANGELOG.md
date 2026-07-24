@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **`mox import-doc`**：Wiki/Markdown 作为第三 Observation 源（`source=wiki` / `fidelity=doc`）；DocFetcher 支持 `--file` 与 `MOX_DOC_FETCH_CMD`；确定性抽取 → 共享 merge/derive；capture 胜出；`mox:manual` 保护；`--llm` 一期占位报错。快照落 `.data/docs/<slug>/`。
 - **Virtual Service 全链路（一期 `paginated-list`）**：Observation → Store Seed → ProtocolProfile → `mox:store` handler；`init`/`merge` 共用 `deriveAndMaterializeVirtualService`；`start` hydrate seeds；空 seed 回退 Snapshot。
 - Capture **content fingerprint** 去重（同 method+host+path+status+body 不重复落盘）。
 - Merge 报告：`unique_stubs` / `vs_derived` / `hosts_learned` / `contract_only` / `handler_manual_skipped`。
@@ -15,6 +16,7 @@
 
 ### Docs
 - `requiredStubs` + `set-scenario` / `quality-gate` 作为自动化前置门禁；未 mock 的 POST **不按 path 猜测**自动透传。
+- `import-doc` 同步：[`references/import-doc.md`](references/import-doc.md)、GLOSSARY / ARCHITECTURE / DECISIONS / contract-schema / learning-path / L0 / L6 / ADR-0001 / README 索引。
 
 ### Breaking
 - **`mox map import` 默认不再写 `rules/map-import.json`**：只更新 session（selective allowlist）；要落盘规则包须显式 `--save-as=<name>`。

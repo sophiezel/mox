@@ -138,7 +138,7 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 
 **主轨意图别名（默认 help）**：`init` · `start` · `stop` · `rules` · `scenario` · `smoke` · `quality-gate`  
 **辅轨**：`start --capture-open` · `traffic all-passthrough` · `mock` · `merge`（`stop --auto-merge`） · `map import` · `device prepare`  
-**Advanced / 旧名（`help --all`）**：`service` · `domain-draft` · `materialize-service` · `classify` · `generate` · `session start\|stop` · `set-case` · `set-scenario` · `traffic …` · `capture-merge` · `list-empty` · `import-openapi` · `export-msw` · `audit` · install/uninstall  
+**Advanced / 旧名（`help --all`）**：`service` · `domain-draft` · `materialize-service` · `classify` · `generate` · `session start\|stop` · `set-case` · `set-scenario` · `traffic …` · `capture-merge` · `list-empty` · `import-openapi` · `import-doc` · `export-msw` · `audit` · install/uninstall  
 
 `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 落盘，**不等于** `all-passthrough`）；与 `--traffic=` 互斥；纯全透传用 `mox traffic all-passthrough`。
 `capture-open` 下 `proxy.captureMitmHosts`（map/`--rules` `.txt` 自动并入）可对名单 host MITM（无需 path rule）。

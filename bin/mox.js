@@ -101,6 +101,7 @@ Advanced / legacy (see references/guide-l6-advanced.md):
   mox list-empty [--gap=GAP] [--all] [--name=serviceId…]
   mox quality-gate [--scenario=NAME] [--require-mitm-check=URL]
   mox import-openapi --from=<spec>
+  mox import-doc --from=<url|path> | --file=<path> [--name=] [--task=]
   mox export-msw [--out=path]
   mox audit [--task=ID] [--api=host/path]
   mox install | uninstall
@@ -126,7 +127,7 @@ Flags:
 
   const footer = `
 Install: bash scripts/install.sh
-Catalog: .data/services/<serviceId>/   Ops: .data/{classify,reports,audit,scenarios}/
+Catalog: .data/services/<serviceId>/   Ops: .data/{classify,reports,audit,scenarios,docs}/
 Session: .data/session.json   Rules: rules/
 Glossary: docs/GLOSSARY.md
 Learn:   references/learning-path.md  (L0→L6 layered guides)
@@ -682,7 +683,7 @@ async function main() {
       console.log('[mox] no empty stubs — all stubs have shape or capture');
       return;
     }
-    console.log(`[mox] ${rows.length} empty stub(s) needing capture-merge / import-openapi:`);
+    console.log(`[mox] ${rows.length} empty stub(s) needing capture-merge / import-openapi / import-doc:`);
     for (const r of rows) {
       console.log(
         `- ${r.stubId} [${r.fidelity}]${r.gaps.length ? ` gaps=${r.gaps.join(',')}` : ''}${r.exportHint ? ` export=${r.exportHint}` : ''}`,
@@ -720,6 +721,19 @@ async function main() {
       from: f.from,
       taskId: f.task || null,
       force: Boolean(f.force),
+    });
+    return;
+  }
+
+  if (cmd === 'import-doc') {
+    const { importDoc } = require('../scripts/import-doc');
+    importDoc({
+      projectDir: process.cwd(),
+      name: f.name,
+      from: f.from || null,
+      file: f.file || null,
+      taskId: f.task || null,
+      llm: Boolean(f.llm),
     });
     return;
   }
