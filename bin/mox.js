@@ -69,7 +69,7 @@ mox — frontend API mock CLI (single proxy, multi catalog)
 
 Primary:
   mox init [scanDir] [--task=ID] [--adapter=name] [--force] [--strict-usage]
-  mox start [--name=serviceId…] [--rules kw…] [--open] [--start-url=URL] [--scan-dir=DIR] [--scenario=NAME] [--proxy-host=HOST] [--proxy-log=summary|verbose|silent] [--mitm=0] [--keep-state] [--detach]
+  mox start [--name=serviceId…] [--rules kw…] [--open] [--start-url=URL] [--scan-dir=DIR] [--scenario=NAME] [--proxy-host=HOST] [--proxy-log=summary|verbose|silent] [--mitm=0] [--keep-state] [--detach] [--device]
   mox open [--start-url=URL]
   mox stop [--auto-merge]
   mox gc [--dry-run]
@@ -77,7 +77,8 @@ Primary:
   mox scenario <name>
   mox smoke [--name=serviceId…] [--ci] [--cases=...] [--scenario=NAME]
   mox trust-ca [--open]
-  mox device prepare --lan-ip=<ip> [--proxy-port=18999]
+  mox device prepare [--lan-ip=<ip>] [--proxy-port=18999]
+  mox device clear
 
 Optional (needs real upstream; not for E2E):
   mox start --capture-open [--name=serviceId…]
@@ -122,6 +123,7 @@ Flags:
   --auto-merge         with stop: run capture-merge after stop
   --keep-state         with start: do not reset Virtual Service store / journal
   --detach             with start: spawn background session (survives shell exit); stop via mox stop
+  --device             with start: Hybrid — adb set Global http_proxy + lease; cleared on mox stop / Ctrl+C
   --dry-run            with gc: report what would be removed without deleting
 `;
 
@@ -300,6 +302,7 @@ async function runSessionStart(f) {
     proxyLog: f['proxy-log'],
     traffic,
     keepState: Boolean(f['keep-state']),
+    device: Boolean(f.device),
   });
 }
 
@@ -582,7 +585,19 @@ async function main() {
       }
       return;
     }
-    console.error('Usage: mox device prepare --lan-ip=<ip> [--proxy-port=18999]');
+    if (sub === 'clear') {
+      const { deviceClear } = require('../scripts/device-clear');
+      try {
+        deviceClear({});
+      } catch (e) {
+        console.error(`[mox] ${e.message}`);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error(
+      'Usage: mox device prepare [--lan-ip=<ip>] [--proxy-port=18999]\n       mox device clear   # WARN: clears phone global http_proxy (incl. Whistle)',
+    );
     process.exit(1);
   }
   if (cmd === 'mock') {

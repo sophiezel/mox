@@ -90,7 +90,9 @@ mox stop
 # Whistle map: rules/<name>.txt 或 mox map import ./map.txt
 # 加宽落盘: --capture-open（≠ 全透传；全透传用 traffic all-passthrough）
 # 真机: 看启动日志 Wi-Fi 代理 / CA URL（/mox/ca.cer）；修复: mox trust-ca
-# Android 助手: mox device prepare --lan-ip=<LAN>
+# Android Hybrid: mox start --device
+# CA only (no proxy): mox device prepare [--lan-ip=<LAN>]
+# Force clear sticky global proxy: mox device clear
 # 仅本机: --proxy-host=127.0.0.1   收紧 LAN: --no-open-proxy
 # OpenAPI: mox import-openapi --from=./openapi.json
 # Wiki/Markdown: mox import-doc --file=./notes.md --name=demo

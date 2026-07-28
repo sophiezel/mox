@@ -64,10 +64,11 @@ exit 0 = 可提测（零溢出口径）。见 [e2e-and-device-proxy.md](./e2e-an
 mox start --name=demo
 # MITM 默认开；关：--mitm=0
 # 仅本机：--proxy-host=127.0.0.1
-# Android 助手：mox device prepare --lan-ip=<LAN>
+# Hybrid（adb 设全局代理，随 stop 释放）：mox start --device
+# 只装 CA（不设代理）：mox device prepare [--lan-ip=<LAN>]
 ```
 
-按日志填手机 Wi‑Fi 手动代理（真实 IP:port）。勿在公共 Wi‑Fi 使用默认 LAN 绑定。
+按日志填手机 Wi‑Fi 手动代理（真实 IP:port），或 Hybrid 用 `--device`。勿在公共 Wi‑Fi 使用默认 LAN 绑定。`--detach` 时必须 `mox stop` 才会释放设备代理。
 
 电脑与手机须信任**同一份** CA：首次 `mox start` 自动装系统钥匙串；手机打开日志中的 `http://<真实LAN>:<port>/mox/ca.cer`。见 [e2e-and-device-proxy.md](./e2e-and-device-proxy.md)。
 

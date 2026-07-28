@@ -68,7 +68,9 @@ test.afterAll(() => {
 
 ## 真机 WebView（扫码接入：CA + 代理）
 
-**现实约束**：系统 Wi‑Fi「手动 HTTP 代理」没有跨厂商「扫一码写死 host:port」的标准能力。本工具做到：扫码装 CA + PAC URL 少手输；不承诺零点击写入手动代理。
+**现实约束**：系统 Wi‑Fi「手动 HTTP 代理」没有跨厂商「扫一码写死 host:port」的标准能力。手填路径仍可用；Hybrid 可用 adb 写 Global 代理并随会话释放。
+
+### 桌面 / 手填 Wi‑Fi（无需 adb）
 
 1. 电脑与真机同一局域网
 2. 日常直接启动（默认 `0.0.0.0` + 开放 CONNECT，同 Whistle）：
@@ -89,6 +91,26 @@ mox start
    - **自证（以它为准，不以业务页绿盾为准）**：设好代理后，用手机打开任一 **catalog HTTPS 域名** 的 `https://<host>/__mox_mitm_check`，应返回 `{"ok":true,"fingerprintShort":"…"}`。业务页（如未进 catalog 的 ping-fe）可能透传真实证书，绿盾 ≠ MITM CA 已生效。
    - 仅当显式 `MOX_FORCE_REGEN_CA=1` / `mox ca rotate` 后才需删旧证重装；日常指纹不变。
 6. 手机 WebView 打开 H5，请求经 mox → mock / 透传
+
+### Hybrid E2E（adb：`start --device`）
+
+代理写入绑定会话；**不要**再用 `device prepare` 设代理（prepare 只装 CA）。
+
+```bash
+# 最小 runbook（CI 建议 trap）
+trap 'mox stop' EXIT
+mox start --device
+# 若尚未装用户 CA：mox device prepare   # 或扫码装 CA
+# Appium / 手工操作 WebView …
+mox quality-gate --require-mitm-check=https://<catalog-host>/__mox_mitm_check
+mox stop   # 或 Ctrl+C；释放 Global http_proxy lease
+# --detach 时必须显式 mox stop（关终端不会清代理）
+```
+
+- Lease：`~/.mox/device-proxy-lease.json`（跨项目 cwd）
+- 多设备：`ANDROID_SERIAL` 优先；否则全部 online `device`
+- 异常残留：`mox device clear`（**警告**：清空当前全局 `http_proxy`，含 Whistle）
+- Cronet / 证书钉扎：不保证走系统代理（H1）
 
 已开代理时仍可用绝对 URL 下 CA（pathname 解析兼容）。电脑首次 `mox start` 会自动把 CA 写入 System.keychain（一次管理员密码）；重试用 `mox trust-ca`。单测用 `MOX_MITM_DIR` 临时目录，不会改写 `~/.mox/certs`。
 

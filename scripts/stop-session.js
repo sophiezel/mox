@@ -72,6 +72,27 @@ function hintMergeIfCaptures(upstreamIds) {
   return n;
 }
 
+function clearDeviceProxyLease(opts = {}) {
+  try {
+    const {
+      clearDeviceHttpProxyIfLease,
+      CLEAR_FAILED,
+    } = require('../lib/device-proxy');
+    const out = clearDeviceHttpProxyIfLease({
+      runAdb: opts.runAdb,
+      leasePath: opts.leasePath,
+    });
+    if (out && out.ok === false && out.code === CLEAR_FAILED) {
+      console.error(`[mox] ${CLEAR_FAILED}`);
+    }
+    return out;
+  } catch (e) {
+    console.error(`[mox] DEVICE_PROXY_CLEAR_FAILED: ${e.message}`);
+    console.error('[mox] tip: mox device clear');
+    return { ok: false, error: e.message };
+  }
+}
+
 function stopSession(opts = {}) {
   const projectDir = opts.projectDir || process.cwd();
   const label = resolveScanLabel(projectDir, opts.name);
@@ -88,6 +109,9 @@ function stopSession(opts = {}) {
     catalogs = sessionCatalogs.length ? sessionCatalogs : [];
   }
   const primary = (state && state.projectSlug) || catalogs[0] || label;
+
+  // Always try lease clear first (even with no runtime) so sticky proxy cannot linger.
+  const deviceProxyClear = clearDeviceProxyLease(opts);
 
   if (!state) {
     console.log('[mox] no runtime state; nothing to stop');
@@ -107,6 +131,7 @@ function stopSession(opts = {}) {
       journalHits: journal.hits,
       mergeResult,
       catalogs,
+      deviceProxyClear,
     };
   }
 
@@ -169,10 +194,18 @@ function stopSession(opts = {}) {
     journalHits: journal.hits,
     mergeResult,
     catalogs,
+    deviceProxyClear,
   };
 }
 
-module.exports = { stopSession, pidAlive, tryKill, countCaptureFiles, hintMergeIfCaptures };
+module.exports = {
+  stopSession,
+  pidAlive,
+  tryKill,
+  countCaptureFiles,
+  hintMergeIfCaptures,
+  clearDeviceProxyLease,
+};
 
 if (require.main === module) {
   stopSession({ projectDir: process.cwd() });

@@ -135,6 +135,16 @@ async function runQualityGate(opts = {}) {
 
   let mitmProbe = null;
   if (opts.requireMitmCheck) {
+    try {
+      const { readLease } = require('../lib/device-proxy');
+      if (!readLease()) {
+        console.warn(
+          '[mox] warn: no device-proxy lease — for Hybrid use mox start --device, or set Wi-Fi proxy + install CA manually',
+        );
+      }
+    } catch {
+      /* ignore */
+    }
     mitmProbe = await probeMitmCheck(opts.requireMitmCheck);
     if (!mitmProbe.ok) {
       failures.push({
@@ -142,6 +152,9 @@ async function runQualityGate(opts = {}) {
         message: `mitm-check probe not ok: ${opts.requireMitmCheck}`,
         probe: mitmProbe,
       });
+      console.error(
+        '[mox] tip: mox start --device (adb proxy) or set Wi-Fi proxy + install CA, then re-check __mox_mitm_check',
+      );
     }
   }
 

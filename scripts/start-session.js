@@ -454,6 +454,10 @@ async function startSession(opts = {}) {
   const proxyHost = cfg.proxy.host || '0.0.0.0';
   const proxyPort = cfg.proxy.port || 18999;
 
+  if (opts.device && !cfg.proxy.enabled) {
+    throw new Error('mox start --device requires proxy.enabled (cannot set device http_proxy)');
+  }
+
   if (!(await portFree(mockHost, mockPort))) {
     const { hint } = explainPortBusy({
       runtimePath: getGlobalRuntimePath(),
@@ -662,6 +666,19 @@ async function startSession(opts = {}) {
         }`,
       );
     }
+    if (opts.device) {
+      const { attachDeviceForSession } = require('../lib/device-proxy');
+      const catalogHost =
+        (merged.rules || [])
+          .map((r) => r && (r.host || r.hostname))
+          .find((h) => h && String(h).trim()) || undefined;
+      attachDeviceForSession({
+        lanIp: ip,
+        proxyPort,
+        catalogHost,
+        source: 'start --device',
+      });
+    }
     {
       const {
         buildDeviceSetupUrls,
@@ -671,7 +688,11 @@ async function startSession(opts = {}) {
       const scenarioLabel = cfg.scenario || opts.scenario || '(unset)';
       const wifiHost = ip || resolveClientProxyHost(proxyHost);
       console.log('');
-      console.log('===【真机接入】扫码或手填===');
+      console.log(
+        opts.device
+          ? '===【真机接入】adb 已设全局代理；仍可扫码装 CA==='
+          : '===【真机接入】扫码或手填===',
+      );
       if (ip) {
         console.log(`  Wi-Fi 代理: ${urls.wifiProxy}`);
         console.log(`  接入页: ${urls.hub}`);
@@ -785,6 +806,16 @@ async function startSession(opts = {}) {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log('\n[mox] stopping...');
+    try {
+      const { clearDeviceHttpProxyIfLease, CLEAR_FAILED } = require('../lib/device-proxy');
+      const cleared = clearDeviceHttpProxyIfLease({});
+      if (cleared && cleared.ok === false && cleared.code === CLEAR_FAILED) {
+        console.error(`[mox] ${CLEAR_FAILED}`);
+      }
+    } catch (e) {
+      console.error(`[mox] DEVICE_PROXY_CLEAR_FAILED: ${e.message}`);
+      console.error('[mox] tip: mox device clear');
+    }
     if (chromePid) {
       try {
         process.kill(chromePid, 'SIGTERM');

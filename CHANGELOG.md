@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Device proxy lifecycle**：`mox start --device` 写 Android Global `http_proxy` + `~/.mox/device-proxy-lease.json`；`mox stop` / Ctrl+C 匹配释放；`mox device clear` 强制清（会清空当前全局代理）。`device prepare` 仅 push CA，**不再**设代理。
 - **`mox import-doc`**：Wiki/Markdown 作为第三 Observation 源（`source=wiki` / `fidelity=doc`）；DocFetcher 支持 `--file` 与 `MOX_DOC_FETCH_CMD`；确定性抽取 → 共享 merge/derive；capture 胜出；`mox:manual` 保护；`--llm` 一期占位报错。快照落 `.data/docs/<slug>/`。
 - **Virtual Service 全链路（一期 `paginated-list`）**：Observation → Store Seed → ProtocolProfile → `mox:store` handler；`init`/`merge` 共用 `deriveAndMaterializeVirtualService`；`start` hydrate seeds；空 seed 回退 Snapshot。
 - Capture **content fingerprint** 去重（同 method+host+path+status+body 不重复落盘）。
@@ -39,7 +40,7 @@
 ### Added
 - Sticky rule packs：本地 `.data/rules-active`（≈ Whistle `selectedList`；一行一包名，`#` 注释）；`mox rules use` / `start --rules` 写入；plain `mox start` 重 apply；空 preference 且残留 `activeRules` → 清 pack 门闸（`selective`+空 allowlist）；`mox rules clear` 同。
 - `lib/data-retention.js` 通用防膨胀原语 + `mox gc`；浏览器 opt-in（`--open` / `mox open`）。
-- `mox device prepare`：ADB 设 `http_proxy`、push CA、打印 App WebView `__mox_mitm_check`（不输 PIN；H1）。
+- `mox device prepare`：ADB push CA、打印 App WebView `__mox_mitm_check`（不设 `http_proxy`；代理见 `start --device`）。
 - `quality-gate --require-mitm-check=<url>`：Hybrid 可见性探针。
 - Scenario `requiredStubs`：缺失/空 stub 时 `set-scenario` / `quality-gate` 失败。
 - `mox quality-gate`：提测门禁（空/TRACE_EMPTY → exit 1；写 `.data/reports/quality-gate-*.json`）。零溢出口径 = gate exit 0。

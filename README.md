@@ -148,8 +148,13 @@ mox merge   # 已有 stub 升 L2；无 stub 且 host 可推导 → 开户/promot
 mox start --name=demo
 # 按日志抄 Wi‑Fi 代理 IP:port；手机装日志里的 http://<真实LAN>:<port>/mox/ca.cer
 # 仅本机：--proxy-host=127.0.0.1   收紧 CONNECT：--no-open-proxy
-# Android（可选 ADB 助手，不输 PIN）：
-mox device prepare --lan-ip=<LAN>
+
+# Hybrid / App WebView（adb 自动设全局代理，stop / Ctrl+C 自动释放）：
+mox start --device
+# 可选：只 push CA（不设代理）
+mox device prepare [--lan-ip=<LAN>]
+# 异常残留强制清（会清空手机全局 http_proxy，含 Whistle）：
+mox device clear
 ```
 
 见 [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md)。
@@ -190,7 +195,9 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | `scenario` / `set-case` | 切场景或单个接口响应 |
 | `quality-gate` | 提测门禁（空/TRACE_EMPTY → exit 1；可选 `--require-mitm-check=`） |
 | `import-openapi` / `import-doc` | OpenAPI 或 Wiki/Markdown → Observation → catalog（doc：`MOX_DOC_FETCH_CMD` / `--file`） |
-| `device prepare` | ADB：设 `http_proxy`、push CA、打印 WebView mitm-check |
+| `device prepare` | 仅 ADB push CA + 指引（**不设** `http_proxy`；代理用 `start --device`） |
+| `device clear` | 强制清空手机全局 `http_proxy` + 删 lease（会误伤 Whistle） |
+| `start --device` | Hybrid：adb 设全局代理 + lease；`stop`/Ctrl+C 释放 |
 | `smoke [--ci]` | 冒烟 |
 | `start --capture-open` / `traffic all-passthrough` / `mock` / `merge` | 加宽落盘、全透传、切回 mock、写回 |
 | `help --all` | 高级：`service` / `domain-draft` / `materialize-service` / `traffic` / … |
@@ -207,7 +214,7 @@ mox export-msw --out=./msw-handlers.js --name=demo
 | [`references/learning-path.md`](./references/learning-path.md) | L0→L6 分层引导（推荐系统学习） |
 | [`references/import-doc.md`](./references/import-doc.md) | Wiki/Markdown → Observation（`mox import-doc`） |
 | [`references/session-and-proxy.md`](./references/session-and-proxy.md) | traffic / `--rules` / Whistle map / `proxy.mode` / `--open` / `dataRetention` |
-| [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md) | Playwright、真机、quality-gate、device prepare |
+| [`references/e2e-and-device-proxy.md`](./references/e2e-and-device-proxy.md) | Playwright、真机、quality-gate、`start --device` |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | 已锁定决策（真源） |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | 架构摘要 |
 | [`docs/BACKLOG.md`](./docs/BACKLOG.md) | 未做事项 |

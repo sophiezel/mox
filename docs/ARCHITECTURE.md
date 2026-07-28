@@ -6,7 +6,7 @@
 
 | 角色 | 职责 |
 |------|------|
-| CLI / runtime | discover、generate、session、proxy、scenario、capture-merge、smoke、quality-gate、map import、device prepare |
+| CLI / runtime | discover、generate、session、proxy、scenario、capture-merge、smoke、quality-gate、map import、start --device、device prepare/clear |
 | LLM（或人） | 有任务时的 classify、冲突决议、`new` IO 起草（须确认）、缺口解释与下一步 |
 | Skill（[`SKILL.md`](../SKILL.md)） | checklist + BLOCK/禁宣称规则；禁止 Agent 自写脚本绕开 CLI |
 

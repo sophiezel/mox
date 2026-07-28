@@ -1,60 +1,36 @@
 'use strict';
 
 /**
- * mox device prepare — ADB helper for Hybrid (H1).
- * Sets http_proxy, pushes CA, prints mitm-check URL.
- * Does NOT enter PIN / bypass pinning / Cronet.
+ * mox device prepare — push CA + print install / mitm hints only.
+ * Does NOT set Global http_proxy (use: mox start --device).
  */
 
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const { ensureCa, ensureCaCerFile, caFingerprintShort } = require('../lib/mitm-ca');
 const { buildDeviceSetupUrls } = require('../lib/device-setup');
-
-function defaultRunAdb(args) {
-  const r = spawnSync('adb', args, { encoding: 'utf8' });
-  return {
-    status: r.status == null ? 1 : r.status,
-    stdout: r.stdout || '',
-    stderr: r.stderr || '',
-  };
-}
-
-function listDevices(runAdb) {
-  const r = runAdb(['devices']);
-  if (r.status !== 0) {
-    throw new Error(`adb devices failed: ${r.stderr || r.stdout}`);
-  }
-  const lines = String(r.stdout)
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .filter((l) => !/^List of devices/i.test(l));
-  const devices = lines
-    .map((l) => l.split(/\s+/))
-    .filter((parts) => parts[1] === 'device')
-    .map((parts) => parts[0]);
-  return devices;
-}
+const {
+  defaultRunAdb,
+  listTargetSerials,
+  CA_REMOTE,
+} = require('../lib/device-proxy');
 
 /**
  * @param {object} opts
- * @param {string} opts.lanIp
+ * @param {string} [opts.lanIp] for hub / CA URL hints only
  * @param {number} [opts.proxyPort]
- * @param {string} [opts.catalogHost] host for mitm-check hint
+ * @param {string} [opts.catalogHost]
  * @param {(args: string[]) => {status:number,stdout:string,stderr:string}} [opts.runAdb]
  */
 function devicePrepare(opts = {}) {
+  console.log(
+    '[mox] BANNER: device prepare does NOT set http_proxy — use: mox start --device',
+  );
+
   const runAdb = typeof opts.runAdb === 'function' ? opts.runAdb : defaultRunAdb;
   const lanIp = String(opts.lanIp || '').trim();
   const proxyPort = Number(opts.proxyPort || 18999);
-  if (!lanIp) {
-    throw new Error('device prepare: need --lan-ip= (or pass lanIp)');
-  }
-  const devices = listDevices(runAdb);
-  if (!devices.length) {
-    throw new Error('no device: adb devices empty (plug phone / start emulator)');
-  }
+
+  const serials = listTargetSerials(runAdb);
 
   const ca = ensureCa({});
   const certPath = ca.certPath || ca.caCertPath;
@@ -63,35 +39,32 @@ function devicePrepare(opts = {}) {
     throw new Error('device prepare: CA .cer missing');
   }
 
-  const proxyValue = `${lanIp}:${proxyPort}`;
-  const put = runAdb([
-    'shell',
-    'settings',
-    'put',
-    'global',
-    'http_proxy',
-    proxyValue,
-  ]);
-  if (put.status !== 0) {
-    throw new Error(`adb settings put http_proxy failed: ${put.stderr || put.stdout}`);
+  for (const serial of serials) {
+    const push = runAdb(['-s', serial, 'push', cer, CA_REMOTE]);
+    if (push.status !== 0) {
+      throw new Error(
+        `adb push CA failed (${serial}): ${push.stderr || push.stdout}`,
+      );
+    }
   }
 
-  const remote = '/sdcard/Download/mox-rootCA.cer';
-  const push = runAdb(['push', cer, remote]);
-  if (push.status !== 0) {
-    throw new Error(`adb push CA failed: ${push.stderr || push.stdout}`);
-  }
-
-  const urls = buildDeviceSetupUrls({ lanIp, proxyPort });
+  const urls = buildDeviceSetupUrls({
+    lanIp: lanIp || null,
+    proxyPort,
+  });
   const fp = caFingerprintShort(certPath);
   const catalogHost = opts.catalogHost || '<catalog-https-host>';
   const mitmCheckHint = `https://${catalogHost}/__mox_mitm_check`;
 
-  console.log(`[mox] device prepare ok devices=${devices.join(',')}`);
-  console.log(`[mox] http_proxy=${proxyValue}`);
-  console.log(`[mox] CA pushed → ${remote} (install as user CA in Settings)`);
-  console.log(`[mox] hub ${urls.hub}`);
-  console.log(`[mox] App WebView mitm-check: ${mitmCheckHint}`);
+  console.log(`[mox] device prepare ok devices=${serials.join(',')} (CA only)`);
+  console.log(`[mox] CA pushed → ${CA_REMOTE} (install as user CA in Settings)`);
+  if (urls.hub) console.log(`[mox] hub ${urls.hub}`);
+  else if (!lanIp) {
+    console.log(
+      '[mox] tip: pass --lan-ip=<LAN> to print hub / CA URL; proxy still via mox start --device',
+    );
+  }
+  console.log(`[mox] App WebView mitm-check (after start --device): ${mitmCheckHint}`);
   if (fp) console.log(`[mox] CA fingerprint ${fp}…`);
   console.log(
     '[mox] note: does not enter PIN; Cronet/pinning apps that ignore system proxy are out of scope (H1)',
@@ -99,16 +72,16 @@ function devicePrepare(opts = {}) {
 
   return {
     ok: true,
-    devices,
-    proxyValue,
-    caRemote: remote,
+    devices: serials,
+    caRemote: CA_REMOTE,
     mitmCheckHint,
     hub: urls.hub,
     fingerprint: fp,
+    httpProxySet: false,
   };
 }
 
-module.exports = { devicePrepare, listDevices };
+module.exports = { devicePrepare, listDevices: listTargetSerials };
 
 if (require.main === module) {
   try {

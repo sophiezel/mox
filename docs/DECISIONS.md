@@ -31,7 +31,7 @@
 | Map | `mox map import` / `--rules` `.txt`：Whistle **pattern 子集**（`https://host/path` \| `host/path` \| `host`；可选第二列 `/path` 或 `http(s)://…` 仅标记本地 mock）；单列合法；**拒绝**纯 `/path`；协议不参与运行时匹配；path 前缀 `/` 边界 |
 | `proxy.mode` | `mock-lab`（默认）\| `capture-open`；CLI `--capture-open`（已弃用 `--record` / `record-first` / `mox record`） |
 | 提测 | `mox quality-gate` exit 0 = 可提测（Z1）；可选 `--require-mitm-check=`（H1：须系统代理 WebView） |
-| 真机助手 | `mox device prepare --lan-ip=`：ADB 设代理、push CA、提示 `__mox_mitm_check`（不输 PIN） |
+| 真机助手 | `mox start --device`：ADB 设全局代理 + lease，`stop`/Ctrl+C 释放；`device prepare` 仅 push CA（不设代理）；`device clear` 强制清 |
 | 多 catalog | `start --name=<serviceId…>` 挂载指定 services；省略 `--name` = 全部有 proxy-rules 的 **services** |
 | service id 冲突 | 同 id 且 `hosts` 不相交 → generate **硬失败**（同 path 不同域名不得静默合并）；无 host、仅相同 prefixKey 时无法自动拆分（见 GLOSSARY 残留限制） |
 | 否决 | 默认「每 frontend 一份运行时 session / 各起一个代理」；否决「mocks 真源挂在 frontend 名下」 |
@@ -137,7 +137,7 @@ Scenario 文件 `.data/scenarios/<name>.json`：`{ default, apis }`；`set-scena
 ## CLI 面
 
 **主轨意图别名（默认 help）**：`init` · `start` · `stop` · `rules` · `scenario` · `smoke` · `quality-gate`  
-**辅轨**：`start --capture-open` · `traffic all-passthrough` · `mock` · `merge`（`stop --auto-merge`） · `map import` · `device prepare`  
+**辅轨**：`start --capture-open` · `traffic all-passthrough` · `mock` · `merge`（`stop --auto-merge`） · `map import` · `start --device` / `device prepare`（CA） / `device clear`  
 **Advanced / 旧名（`help --all`）**：`service` · `domain-draft` · `materialize-service` · `classify` · `generate` · `session start\|stop` · `set-case` · `set-scenario` · `traffic …` · `capture-merge` · `list-empty` · `import-openapi` · `import-doc` · `export-msw` · `audit` · install/uninstall  
 
 `--capture-open` → `proxy.mode=capture-open`（加宽 MITM 落盘，**不等于** `all-passthrough`）；与 `--traffic=` 互斥；纯全透传用 `mox traffic all-passthrough`。
